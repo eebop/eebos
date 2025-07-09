@@ -1,2 +1,6 @@
 *.o
 *.bin
+isodir/boot/grub/grub.cfg
+*.iso
+*.lock
+.vscode
