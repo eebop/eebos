@@ -1,0 +1,9 @@
+display_library: sdl2
+cpu: count=2, ips=10000000
+memory: guest=512, host=256
+vgaromimage: file=$HOME/ostools/VGABIOS-lgpl-latest.bin
+
+ata0-slave: type=cdrom, path=eebos.iso, status=inserted
+boot: cdrom
+
+mouse: type=ps2, enabled=1
