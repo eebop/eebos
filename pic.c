@@ -73,7 +73,9 @@ void IRQ_set_mask(uint8_t IRQline) {
         port = PIC2_DATA;
         IRQline -= 8;
     }
+	io_wait();
     value = inb(port) | (1 << IRQline);
+	io_wait();
     outb(port, value);        
 }
 
@@ -87,6 +89,8 @@ void IRQ_clear_mask(uint8_t IRQline) {
         port = PIC2_DATA;
         IRQline -= 8;
     }
+	io_wait();
     value = inb(port) & ~(1 << IRQline);
+	io_wait();
     outb(port, value);        
 }

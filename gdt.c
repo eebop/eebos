@@ -86,7 +86,7 @@ void lidt(uint8_t *target, uint16_t size) {
     idtr.base = (uint32_t) target;
     idtr.limit = size;
 
-    asm (
+    asm volatile (
         "lidt %0\n"
         "sti"
         :: "m" (idtr)

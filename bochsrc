@@ -6,3 +6,6 @@ ata0-slave: type=cdrom, path=eebos.iso, status=inserted
 boot: cdrom
 
 mouse: type=ps2, enabled=1
+
+romimage: file=BIOS-bochs-latest, address=0xfffe0000
+vgaromimage: file=VGABIOS-lgpl-latest.bin

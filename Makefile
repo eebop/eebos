@@ -4,7 +4,10 @@ NAS = nasm
 
 CFLAGS = -std=gnu23 -ffreestanding -Wall -Wextra -O2
 
-OBJECTS = boot.o kernel.o stdutils.o gdt.o pic.o ports.o irq.o mouse.o
+OBJECTS = boot.o kernel.o stdutils.o gdt.o pic.o ports.o irq.o ps2/controller.o ps2/mouse.o ps2/keyboard.o
+
+kqemu: eebos.bin
+	qemu-system-i386 -kernel eebos.bin
 
 qemu: eebos.iso
 	qemu-system-i386 -cdrom eebos.iso
@@ -24,12 +27,20 @@ isodir/boot/eebos.bin: eebos.bin
 eebos.bin: linker.ld ${OBJECTS}
 	${CC} -T linker.ld -o $@ -ffreestanding -O2 -nostdlib ${OBJECTS} -lgcc
 
-kernel.o: stdutils.h
 %.o: %.nasm
 	nasm -f elf32 $< -o $@
 
+%.c:
+	makefile.deps
+
+makefile.deps:
+	CC -MM *.c */*.c > makefile.deps
+
+include makefile.deps
+
 clean:
 	-rm *.o
+	-rm */*.o
 	-rm eebos.iso
 	-rm eebos.bin
 	-rm isodir/boot/eebos.bin

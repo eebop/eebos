@@ -5,7 +5,7 @@
 
 #include "gdt.h"
 #include "pic.h"
-#include "mouse.h"
+#include "ps2/controller.h"
 
 
 /* Check if the compiler thinks you are targeting the wrong operating system. */
@@ -200,31 +200,7 @@ void badexcept(void)
 {
 	printf("test interupt caught\n");
 	PIC_sendEOI(8);
-	// while (1) {}
-}
-
-
-static const char PS2SCS1_charset[] = "  1234567890-=\b\tqwertyuiop[]\n asdfghjkl;\'` \\zxcvbnm,./";
-
-void keyboard_in(void)
-{
-	uint8_t key = inb(0x60);
-	char pressed = ' ';
-
-	if ((key & 0x7f) <= 0x35) {
-		pressed = PS2SCS1_charset[key & 0x7f];
-	}
-
-	printf("%s: %c\n", key & 0x80 ? "released" : "pressed", pressed);
-	PIC_sendEOI(1);
-}
-
-void mouse_in(void)
-{
-	printf("here!\n");
-	while (1) {};
-	inb(0x60);
-	PIC_sendEOI(12);
+	while (1) {}
 }
 
 static inline bool are_interrupts_enabled()
@@ -253,6 +229,8 @@ void kernel_main(void)
 	// printf("RO START: 0x%x, RW START: 0x%x, K END: 0x%x\n", KERNEL_START_RO, KERNEL_START_RW, KERNEL_END);
 
 	// ((void (*)(void)) isr_table[44])();
+
+	memsetup();
 
 	GDTEntry nulle;
 	nulle.base = 0;
@@ -294,7 +272,6 @@ void kernel_main(void)
 		entry.offset = (uint32_t) isr_table[i];
 		encodeIDTEntry(&KERNEL_END[0x18 + 8 * i], entry);
 	}
-	lidt(&KERNEL_END[0x18], 256 * 8 - 1);
 
 	PIC_remap(0x20, 0x28);
 
@@ -302,66 +279,15 @@ void kernel_main(void)
 			IRQ_set_mask(x);
 	}
 
+	IRQ_clear_mask(2);
 
-
-	// printf("str: %s", PS2SCS1_charset);
+	lidt(&KERNEL_END[0x18], 256 * 8 - 1);
 	
 	printf("Interrupts: %x\n", are_interrupts_enabled());
 
-	// outb(0x64, 0xA8);
-	// io_wait2();
-
-
-
-	// outb(0x64, 0x20);
-	// io_wait2();
-	// uint8_t ccb = inb(0x60);
-	// // // ccb &= ~0x20;
-	// // // ccb |= 0x2; 
-	// printf("ccb status: %b\n", ccb);
-	// ccb = 0b01000111;
-	// printf("ccb status: %b\n", ccb);
-	// io_wait2();
-	// outb(0x64, 0x60);
-	// io_wait2();
-	// outb(0x60, ccb);
-	// io_wait2();
-	// outb(0x64, 0xAE);
-	// io_wait2();
-	// printf("Aux responce: %x\n", inb(0x60));
-
-	// outb(0x64, 0xD0);
-	// io_wait2();
-	// printf("cop status: %b\n", inb(0x60));
-
-	// // printf("compaq status is: %x\n", )
-	// uint8_t byte;
-	// // do {
-	// // 	byte = inb(0x60);
-	// // 	// printf("AuxInputResponce: 0x%x\n", byte);
-	// // } while (byte != 0xFA);
-	// outb(0x64, 0x20);
-	// printf("diff: %b, %b\n", ccb, inb(0x60));
-	
-	pc2_init();
-
-	// IRQ_clear_mask(1);
-
-
-	// IRQ_clear_mask(12);
-
-	// asm(
-	// 	"idiv 0"
-	// );
-
-	// enable_streaming();
+	ps2_init();
 
 	while (1) {
-		// get_mouse();
 	}
 
-	// printf("%d\n", 3 / zdiv.privilege);
-	// asm(
-	// 	"int $0"
-	// );
 }
