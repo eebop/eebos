@@ -1,12 +1,6 @@
-gdt.o: gdt.c gdt.h
-kernel.o: kernel.c gdt.h pic.h ports.h ps2/controller.h ps2/../ports.h \
- ps2/../pic.h ps2/../stdutils.h
-pic.o: pic.c pic.h ports.h
-ports.o: ports.c ports.h
-stdutils.o: stdutils.c
-controller.o: ps2/controller.c ps2/controller.h ps2/../ports.h \
- ps2/../pic.h ps2/../ports.h ps2/../stdutils.h ps2/keyboard.h ps2/mouse.h
-keyboard.o: ps2/keyboard.c ps2/keyboard.h ps2/../ports.h ps2/../pic.h \
- ps2/../ports.h ps2/../stdutils.h
-mouse.o: ps2/mouse.c ps2/mouse.h ps2/controller.h ps2/../ports.h \
- ps2/../pic.h ps2/../ports.h ps2/../stdutils.h
+kernel.o: src/kernel.c src/gdt.h src/pic.h src/ports.h src/stdutils.h \
+ src/ps2/control_rs.h
+stdutils.o: src/stdutils.c
+gdt.o: src/gdt.c src/gdt.h
+pic.o: src/pic.c src/pic.h src/ports.h
+ports.o: src/ports.c src/ports.h

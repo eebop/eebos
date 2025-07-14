@@ -11,7 +11,7 @@ typedef struct {
     uint8_t byte1;
 } mouse_state;
 
-mouse_state *mouse_init(PS2TOKEN token);
+void mouse_init(PS2TOKEN token);
 void mouse_in(void);
 
 #endif

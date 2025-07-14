@@ -1,6 +1,7 @@
-*.o
-*.bin
-isodir/boot/grub/grub.cfg
-*.iso
+build
 *.lock
 .vscode
+
+# Added by cargo
+
+/target

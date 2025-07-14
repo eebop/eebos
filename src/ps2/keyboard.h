@@ -12,7 +12,7 @@ typedef struct {
 
 
 
-keyboard_state *keyboard_init(PS2TOKEN token);
+// keyboard_state *keyboard_init(PS2TOKEN token);
 void keyboard_in(void);
 
 #endif

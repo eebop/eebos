@@ -48,7 +48,7 @@ isr_err_stub 29
 isr_err_stub 30
 isr_err_stub 31
 isr_err_stub 32
-isr_err 33, keyboard_in
+isr_err_stub 33; isr_err 33, keyboard_in
 isr_err_stub 34
 isr_err_stub 35
 isr_err_stub 36
@@ -58,9 +58,8 @@ isr_err_stub 39
 isr_err_stub 40
 isr_err_stub 41
 isr_err_stub 42
-isr_err 43, mouse_in
-isr_err 44, mouse_in
-isr_err 45, mouse_in
+isr_err_stub 43
+isr_err_stub 44;isr_err 44, mouse_in
 
 global isr_table
 isr_table:

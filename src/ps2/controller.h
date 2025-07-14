@@ -18,9 +18,9 @@ void ps2_init();
 void ps2_device_write(PS2TOKEN token, uint8_t value);
 uint8_t ps2_read(PS2PORT port);
 
-typedef union {
-    keyboard_state *keyboard,
-    mouse_state *mouse
-} state;
+// typedef union {
+//     keyboard_state *keyboard,
+//     mouse_state *mouse
+// } state;
 
 #endif

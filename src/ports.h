@@ -2,11 +2,11 @@
 #define __PORTS_H
 #include <stdint.h>
 
-static inline void outb(uint16_t port, uint8_t val);
-static inline uint8_t inb(uint16_t port);
-static inline void io_wait(void);
+static void outb(uint16_t port, uint8_t val);
+static uint8_t inb(uint16_t port);
+static void io_wait(void);
 
-static inline void outb(uint16_t port, uint8_t val)
+static void outb(uint16_t port, uint8_t val)
 {
     asm volatile ( "outb %b0, %w1" : : "a"(val), "Nd"(port) : "memory");
     /* There's an outb %al, $imm8 encoding, for compile-time constant port numbers that fit in 8b. (N constraint).
@@ -15,7 +15,7 @@ static inline void outb(uint16_t port, uint8_t val)
      * %1 expands to %dx because  port  is a uint16_t.  %w1 could be used if we had the port number a wider C type */
 }
 
-static inline uint8_t inb(uint16_t port)
+static uint8_t inb(uint16_t port)
 {
     uint8_t ret;
     asm volatile ( "inb %w1, %b0"
@@ -25,7 +25,7 @@ static inline uint8_t inb(uint16_t port)
     return ret;
 }
 
-static inline void io_wait(void)
+static void io_wait(void)
 {
     outb(0x80, 0);
 }

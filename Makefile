@@ -1,47 +1,83 @@
 CC = i686-elf-gcc
 AS = i686-elf-as
 NAS = nasm
+RSC = rustc
 
 CFLAGS = -std=gnu23 -ffreestanding -Wall -Wextra -O2
+RSFLAGS = -O --crate-type=bin --emit=obj --target=i686-unknown-linux-gnu -C panic=abort -C lto=true -C code-model=small -C no-redzone=true
 
-OBJECTS = boot.o kernel.o stdutils.o gdt.o pic.o ports.o irq.o ps2/controller.o ps2/mouse.o ps2/keyboard.o
+# all filenames to build, minus extension
+srcs = boot kernel stdutils gdt pic ports irq ps2/control #ps2/controller ps2/mouse ps2/keyboard 
 
-kqemu: eebos.bin
-	qemu-system-i386 -kernel eebos.bin
+builddir = build
 
-qemu: eebos.iso
-	qemu-system-i386 -cdrom eebos.iso
+srcdir = src
 
-bochs: eebos.iso
+OBJECTS = $(addprefix $(builddir)/,$(srcs:%=%.o))
+
+HEADERS = $(foreach f,$(srcs:%=%.h),$(wildcard src/$f))
+
+CSRC = $(foreach f,$(srcs:%=%.c),$(wildcard src/$f))
+
+RSCMP = $(foreach f,$(srcs:%=%_h.rs),$(wildcard src/$f))
+
+kqemu: build/eebos.bin
+	qemu-system-i386 -kernel build/eebos.bin
+
+qemu: build/eebos.iso
+	qemu-system-i386 -cdrom build/eebos.iso
+
+bochs: build/eebos.iso
 	bochs
 
-eebos.iso: isodir/boot/grub/grub.cfg isodir/boot/eebos.bin
-	grub-mkrescue -o $@ isodir
+build/eebos.iso: build/isodir/boot/grub/grub.cfg build/isodir/boot/eebos.bin
+	grub-mkrescue -o $@ build/isodir
 
-isodir/boot/grub/grub.cfg: grub.cfg
+build/isodir/boot/grub/grub.cfg: build/grub.cfg
+	mkdir -p build/isodir/boot/grub
 	cp $< $@
 
-isodir/boot/eebos.bin: eebos.bin
+build/isodir/boot/eebos.bin: build/eebos.bin
+	mkdir -p build/isodir/boot
 	cp $< $@
 
-eebos.bin: linker.ld ${OBJECTS}
-	${CC} -T linker.ld -o $@ -ffreestanding -O2 -nostdlib ${OBJECTS} -lgcc
+build/eebos.bin: linker.ld ${OBJECTS}
+	${CC} -T linker.ld -o $@ -ffreestanding -O2 -nostdlib ${OBJECTS} -lgcc -z noexecstack
 
-%.o: %.nasm
-	nasm -f elf32 $< -o $@
+$(builddir)/%.o: $(srcdir)/%.nasm
+	mkdir -p $(dir $@)
+	$(NAS) -f elf32 $< -o $@
 
-%.c:
-	makefile.deps
+$(builddir)/%.o: $(RSCMP) $(srcdir)/%.rs
+	mkdir -p $(dir $@)
+	$(RSC) $(RSFLAGS) $(srcdir)/$*.rs -o $@
 
-makefile.deps:
-	CC -MM *.c */*.c > makefile.deps
+$(builddir)/%.o: $(srcdir)/%.s
+	mkdir -p $(dir $@)
+	$(AS) $(ASFLAGS) $< -o $@
+
+$(builddir)/%.o: $(srcdir)/%.c
+	mkdir -p $(dir $@)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $< -c -o $@
+
+%_rs.h: %.rs
+	cbindgen -c cbindgen.toml $< -o $@
+
+%_h.rs: %.h
+	bindgen --use-core --ctypes-prefix=cty $< -o $@
+
+makefile.deps: $(HEADERS) $(CSRC)
+	for file in $(patsubst %.rs,%_rs.h,$(foreach f,$(srcs:%=%.rs),$(wildcard src/$f))); do \
+		if test ! -f $$file; then \
+			touch -t 197001010101 $$file; \
+		fi; \
+	done
+	$(CC) -MM $(CSRC) > makefile.deps
 
 include makefile.deps
 
 clean:
-	-rm *.o
-	-rm */*.o
-	-rm eebos.iso
-	-rm eebos.bin
-	-rm isodir/boot/eebos.bin
-	-rm isodir/boot/grub/grub.cfg
+	-rm -rf build
+	-rm makefile.deps
+	-rm $(foreach f,$(srcs:%=%_h.rs),$(wildcard src/$f))
+	-rm $(foreach f,$(srcs:%=%_rs.h),$(wildcard src/$f))
