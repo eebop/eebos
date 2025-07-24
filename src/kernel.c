@@ -5,6 +5,7 @@
 #include "gdt.h"
 #include "pic.h"
 #include "stdutils.h"
+#include "page64.h"
 // #include "ps2/controller.h"
 
 
@@ -115,7 +116,9 @@ void kernel_main(void)
 	
 	printf("Interrupts: %x\n", are_interrupts_enabled());
 
-	ps2_init();
+	// ps2_init();
+
+	init_pages();
 
 	while (1) {
 	}

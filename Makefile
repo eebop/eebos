@@ -6,8 +6,10 @@ RSC = rustc
 CFLAGS = -std=gnu23 -ffreestanding -Wall -Wextra -O2
 RSFLAGS = -O --crate-type=bin --emit=obj --target=i686-unknown-linux-gnu -C panic=abort -C lto=true -C code-model=small -C no-redzone=true
 
+QEMUFLAGS = -cpu qemu64 -no-reboot -d cpu_reset,int
+
 # all filenames to build, minus extension
-srcs = boot kernel stdutils gdt pic ports irq ps2/control #ps2/controller ps2/mouse ps2/keyboard 
+srcs = boot kernel stdutils gdt pic ports irq ps2/control page64 #ps2/controller ps2/mouse ps2/keyboard 
 
 builddir = build
 
@@ -19,13 +21,17 @@ HEADERS = $(foreach f,$(srcs:%=%.h),$(wildcard src/$f))
 
 CSRC = $(foreach f,$(srcs:%=%.c),$(wildcard src/$f))
 
-RSCMP = $(foreach f,$(srcs:%=%_h.rs),$(wildcard src/$f))
+RSRC = $(foreach f,$(srcs:%=%.rs),$(wildcard src/$f))
+
+RSCMP = $(HEADERS:%.h=%_h.rs)
+
+CSCMP = $(RSRc:%.rs=%_rs.h)
 
 kqemu: build/eebos.bin
-	qemu-system-i386 -kernel build/eebos.bin
+	qemu-system-x86_64 -kernel build/eebos.bin $(QEMUFLAGS)
 
 qemu: build/eebos.iso
-	qemu-system-i386 -cdrom build/eebos.iso
+	qemu-system-x86_64 -cdrom build/eebos.iso $(QEMUFLAGS)
 
 bochs: build/eebos.iso
 	bochs
@@ -33,7 +39,7 @@ bochs: build/eebos.iso
 build/eebos.iso: build/isodir/boot/grub/grub.cfg build/isodir/boot/eebos.bin
 	grub-mkrescue -o $@ build/isodir
 
-build/isodir/boot/grub/grub.cfg: build/grub.cfg
+build/isodir/boot/grub/grub.cfg: grub.cfg
 	mkdir -p build/isodir/boot/grub
 	cp $< $@
 
@@ -49,6 +55,7 @@ $(builddir)/%.o: $(srcdir)/%.nasm
 	$(NAS) -f elf32 $< -o $@
 
 $(builddir)/%.o: $(RSCMP) $(srcdir)/%.rs
+	echo $(RSCMP)
 	mkdir -p $(dir $@)
 	$(RSC) $(RSFLAGS) $(srcdir)/$*.rs -o $@
 
@@ -64,14 +71,13 @@ $(builddir)/%.o: $(srcdir)/%.c
 	cbindgen -c cbindgen.toml $< -o $@
 
 %_h.rs: %.h
-	bindgen --use-core --ctypes-prefix=cty $< -o $@
+	bindgen --use-core --block-extern-crate $< -o $@ \
+	--raw-line '#![allow(dead_code)]' \
+	--raw-line '#![allow(non_camel_case_types)]' \
+	--raw-line '#![allow(non_upper_case_globals)]' \
+	-- --target=i686-unknown-none
 
-makefile.deps: $(HEADERS) $(CSRC)
-	for file in $(patsubst %.rs,%_rs.h,$(foreach f,$(srcs:%=%.rs),$(wildcard src/$f))); do \
-		if test ! -f $$file; then \
-			touch -t 197001010101 $$file; \
-		fi; \
-	done
+makefile.deps: $(HEADERS) $(CSRC) $(RSCMP) $(CSCMP)
 	$(CC) -MM $(CSRC) > makefile.deps
 
 include makefile.deps
@@ -79,5 +85,5 @@ include makefile.deps
 clean:
 	-rm -rf build
 	-rm makefile.deps
-	-rm $(foreach f,$(srcs:%=%_h.rs),$(wildcard src/$f))
-	-rm $(foreach f,$(srcs:%=%_rs.h),$(wildcard src/$f))
+	-rm $(RSCMP)
+	-rm $(CSCMP)

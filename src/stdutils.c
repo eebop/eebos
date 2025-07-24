@@ -2,7 +2,9 @@
 #include <stddef.h>
 #include <stdarg.h>
 
-extern char KERNEL_END;
+#include "stdutils.h"
+
+extern unsigned char KERNEL_END;
 
 uint8_t *memptr;
 
@@ -13,7 +15,12 @@ void memsetup(void) {
 void *malloc(uint32_t size) {
     uint32_t out = (uint32_t) memptr;
     memptr = memptr + size;
-    return (void *) out;
+	return (void *) out;
+}
+
+void *malloc_aligned(uint32_t size, uint32_t alignment) {
+	malloc((alignment - (size & (alignment - 1))) % alignment);
+	return malloc(size);
 }
 
 /* Hardware text mode color constants. */
@@ -94,6 +101,13 @@ void tputc(char c)
 {
 	if (c == '\n')
 	{
+		while (terminal_column != VGA_WIDTH)
+		{
+			terminal_putentryat(' ', terminal_color, terminal_column, terminal_row);
+			terminal_column++;
+
+		}
+		
 		terminal_column = 0;
 		terminal_row++;
 	}
@@ -131,9 +145,9 @@ void tputd(uint32_t d, int base)
 		return;
 	}
 
-	char buf[32] = {};
+	char buf[33] = {};
 	tputs(buf);
-	int index = 30;
+	int index = 31;
 	while (d)
 	{
 		buf[index--] = nums[d % base];

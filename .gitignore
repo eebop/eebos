@@ -2,6 +2,8 @@ build
 *.lock
 .vscode
 
+src/**/*_h.rs
+
 # Added by cargo
 
 /target

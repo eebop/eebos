@@ -4,4 +4,224 @@
 
 
 
+#define __RUST_INT16_MAX 32767
+
+#define __RUST_INT16_MIN -32768
+
+#define __RUST_INT32_MAX 2147483647
+
+#define __RUST_INT32_MIN -2147483648
+
+#define __RUST_INT8_MAX 127
+
+#define __RUST_INT8_MIN -128
+
+#define __RUST_INTPTR_MAX 2147483647
+
+#define __RUST_INTPTR_MIN -2147483648
+
+#define __RUST_INT_FAST16_MAX 2147483647
+
+#define __RUST_INT_FAST16_MIN -2147483648
+
+#define __RUST_INT_FAST32_MAX 2147483647
+
+#define __RUST_INT_FAST32_MIN -2147483648
+
+#define __RUST_INT_FAST8_MAX 127
+
+#define __RUST_INT_FAST8_MIN -128
+
+#define __RUST_INT_LEAST16_MAX 32767
+
+#define __RUST_INT_LEAST16_MIN -32768
+
+#define __RUST_INT_LEAST32_MAX 2147483647
+
+#define __RUST_INT_LEAST32_MIN -2147483648
+
+#define __RUST_INT_LEAST8_MAX 127
+
+#define __RUST_INT_LEAST8_MIN -128
+
+#define __RUST_PTRDIFF_MAX 2147483647
+
+#define __RUST_PTRDIFF_MIN -2147483648
+
+#define __RUST_SIG_ATOMIC_MAX 2147483647
+
+#define __RUST_SIG_ATOMIC_MIN -2147483648
+
+#define __RUST_SIZE_MAX 4294967295
+
+#define __RUST_UINT16_MAX 65535
+
+#define __RUST_UINT32_MAX 4294967295
+
+#define __RUST_UINT8_MAX 255
+
+#define __RUST_UINTPTR_MAX 4294967295
+
+#define __RUST_UINT_FAST16_MAX 4294967295
+
+#define __RUST_UINT_FAST32_MAX 4294967295
+
+#define __RUST_UINT_FAST8_MAX 255
+
+#define __RUST_UINT_LEAST16_MAX 65535
+
+#define __RUST_UINT_LEAST32_MAX 4294967295
+
+#define __RUST_UINT_LEAST8_MAX 255
+
+#define __RUST_WINT_MAX 4294967295
+
+#define __RUST_WINT_MIN 0
+
+#define __RUST__ATFILE_SOURCE 1
+
+#define __RUST__BITS_STDINT_INTN_H 1
+
+#define __RUST__BITS_STDINT_LEAST_H 1
+
+#define __RUST__BITS_STDINT_UINTN_H 1
+
+#define __RUST__BITS_TIME64_H 1
+
+#define __RUST__BITS_TYPESIZES_H 1
+
+#define __RUST__BITS_TYPES_H 1
+
+#define __RUST__BITS_WCHAR_H 1
+
+#define __RUST__DEFAULT_SOURCE 1
+
+#define __RUST__FEATURES_H 1
+
+#define __RUST__POSIX_C_SOURCE 200809
+
+#define __RUST__POSIX_SOURCE 1
+
+#define __RUST__STDC_PREDEF_H 1
+
+#define __RUST__STDINT_H 1
+
+#define __RUST__SYS_CDEFS_H 1
+
+#define __RUST___FD_SETSIZE 1024
+
+#define __RUST___GLIBC_MINOR__ 39
+
+#define __RUST___GLIBC_USE_C2X_STRTOL 0
+
+#define __RUST___GLIBC_USE_DEPRECATED_GETS 0
+
+#define __RUST___GLIBC_USE_DEPRECATED_SCANF 0
+
+#define __RUST___GLIBC_USE_IEC_60559_BFP_EXT 0
+
+#define __RUST___GLIBC_USE_IEC_60559_BFP_EXT_C2X 0
+
+#define __RUST___GLIBC_USE_IEC_60559_EXT 0
+
+#define __RUST___GLIBC_USE_IEC_60559_FUNCS_EXT 0
+
+#define __RUST___GLIBC_USE_IEC_60559_FUNCS_EXT_C2X 0
+
+#define __RUST___GLIBC_USE_IEC_60559_TYPES_EXT 0
+
+#define __RUST___GLIBC_USE_ISOC2X 0
+
+#define __RUST___GLIBC_USE_LIB_EXT2 0
+
+#define __RUST___GLIBC__ 2
+
+#define __RUST___GNU_LIBRARY__ 6
+
+#define __RUST___HAVE_GENERIC_SELECTION 1
+
+#define __RUST___KERNEL_OLD_TIMEVAL_MATCHES_TIMEVAL64 0
+
+#define __RUST___LDOUBLE_REDIRECTS_TO_FLOAT128_ABI 0
+
+#define __RUST___RLIM_T_MATCHES_RLIM64_T 0
+
+#define __RUST___STATFS_MATCHES_STATFS64 0
+
+#define __RUST___STDC_IEC_559_COMPLEX__ 1
+
+#define __RUST___STDC_IEC_559__ 1
+
+#define __RUST___STDC_IEC_60559_BFP__ 201404
+
+#define __RUST___STDC_IEC_60559_COMPLEX__ 201404
+
+#define __RUST___STDC_ISO_10646__ 201706
+
+#define __RUST___TIMESIZE 32
+
+#define __RUST___USE_ATFILE 1
+
+#define __RUST___USE_FORTIFY_LEVEL 0
+
+#define __RUST___USE_ISOC11 1
+
+#define __RUST___USE_ISOC95 1
+
+#define __RUST___USE_ISOC99 1
+
+#define __RUST___USE_MISC 1
+
+#define __RUST___USE_POSIX 1
+
+#define __RUST___USE_POSIX199309 1
+
+#define __RUST___USE_POSIX199506 1
+
+#define __RUST___USE_POSIX2 1
+
+#define __RUST___USE_POSIX_IMPLICITLY 1
+
+#define __RUST___USE_XOPEN2K 1
+
+#define __RUST___USE_XOPEN2K8 1
+
+#define __RUST___WORDSIZE 32
+
+#define __RUST___WORDSIZE32_PTRDIFF_LONG 0
+
+#define __RUST___WORDSIZE32_SIZE_ULONG 0
+
+#define __RUST___WORDSIZE_TIME64_COMPAT32 0
+
+#define __RUST___glibc_c99_flexarr_available 1
+
+extern void IRQ_clear_mask(uint8_t IRQline);
+
+extern void IRQ_set_mask(uint8_t IRQline);
+
+extern void PIC_remap(int offset1, int offset2);
+
+extern void PIC_sendEOI(uint8_t irq);
+
+extern uint8_t inb(uint16_t port);
+
+extern uint8_t inb(uint16_t port);
+
+extern void io_wait(void);
+
+extern void io_wait(void);
+
+extern void *malloc_aligned(uint32_t size, uint32_t alignment);
+
+extern void memsetup(void);
+
+void mouse_in(void);
+
+extern void outb(uint16_t port, uint8_t val);
+
+extern void outb(uint16_t port, uint8_t val);
+
 void ps2_init(void);
+
+extern void terminal_initialize(void);
