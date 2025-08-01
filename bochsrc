@@ -1,11 +1,17 @@
-display_library: sdl2
-cpu: count=2, ips=10000000
-memory: guest=512, host=256
+cpu: count=2, ips=10000000, reset_on_triple_fault=0#, start_paused=1
 
 ata0-slave: type=cdrom, path=build/eebos.iso, status=inserted
 boot: cdrom
 
-mouse: type=ps2, enabled=1
+#mouse: type=ps2, enabled=1
+magic_break: enabled=1
 
-# romimage: file=BIOS-bochs-latest, address=0xfffe0000
-# vgaromimage: file=VGABIOS-lgpl-latest.bin
+panic: action=report
+error: action=report
+# info: action=report
+# debug: action=report
+
+# debugger: enabled
+
+
+display_library: sdl2

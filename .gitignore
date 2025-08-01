@@ -4,6 +4,8 @@ build
 
 src/**/*_h.rs
 
+makefile.deps
+
 # Added by cargo
 
 /target

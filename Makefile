@@ -6,7 +6,7 @@ RSC = rustc
 CFLAGS = -std=gnu23 -ffreestanding -Wall -Wextra -O2
 RSFLAGS = -O --crate-type=bin --emit=obj --target=i686-unknown-linux-gnu -C panic=abort -C lto=true -C code-model=small -C no-redzone=true
 
-QEMUFLAGS = -cpu qemu64 -no-reboot -d cpu_reset,int
+QEMUFLAGS = -no-reboot -d cpu_reset,int -no-shutdown
 
 # all filenames to build, minus extension
 srcs = boot kernel stdutils gdt pic ports irq ps2/control page64 #ps2/controller ps2/mouse ps2/keyboard 
@@ -34,7 +34,7 @@ qemu: build/eebos.iso
 	qemu-system-x86_64 -cdrom build/eebos.iso $(QEMUFLAGS)
 
 bochs: build/eebos.iso
-	bochs
+	bochs -debugger
 
 build/eebos.iso: build/isodir/boot/grub/grub.cfg build/isodir/boot/eebos.bin
 	grub-mkrescue -o $@ build/isodir
@@ -48,8 +48,7 @@ build/isodir/boot/eebos.bin: build/eebos.bin
 	cp $< $@
 
 build/eebos.bin: linker.ld ${OBJECTS}
-	${CC} -T linker.ld -o $@ -ffreestanding -O2 -nostdlib ${OBJECTS} -lgcc -z noexecstack
-
+	$(CC) -T linker.ld -o $@ -ffreestanding -O2 -nostdlib ${OBJECTS} -lgcc -z noexecstack
 $(builddir)/%.o: $(srcdir)/%.nasm
 	mkdir -p $(dir $@)
 	$(NAS) -f elf32 $< -o $@

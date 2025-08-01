@@ -52,6 +52,11 @@ void io_wait2(void) {
 	}
 }
 
+extern void main64(void);
+
+extern uint32_t stack_top;
+
+
 void kernel_main(void)
 {
 	/* Initialize terminal interface */
@@ -63,29 +68,76 @@ void kernel_main(void)
 
 	memsetup();
 
-	GDTEntry nulle;
-	nulle.base = 0;
-	nulle.limit = 0;
-	nulle.access = 0;
-	nulle.flags = 0;
+	uint8_t gdtarray[0x28];//= malloc(0x28);
 
-	GDTEntry kcode;
-	kcode.base = 0;
-	kcode.limit = 0xFFFFF;
-	kcode.access = 0x9a;
-	kcode.flags = 0xC;
+	GDTSegment nulle = {};
 
-	GDTEntry kdata;
-	kdata.base = 0;
-	kdata.limit = 0xFFFFF;
-	kdata.access = 0x92;
-	kdata.flags = 0xC;
+	GDTSegment kcode32 = {
+		.limit = 0xFFFFF,
+		.accessed = 1,
+		.readwrite = 1,
+		.direct_conform = 0,
+		.exec = 1,
+		.phys = 1,
+		.privilege = 0,
+		.granularity = 1,
+		.is32 = 1,
+		.is64 = 0
+	};
 
-	encodeGdtEntry(&KERNEL_END[0x00], nulle);
-	encodeGdtEntry(&KERNEL_END[0x08], kcode);
-	encodeGdtEntry(&KERNEL_END[0x10], kdata);
+	GDTSegment kdata32 = {
+		.limit = 0xFFFFF,
+		.accessed = 1,
+		.readwrite = 1,
+		.direct_conform = 0,
+		.exec = 0,
+		.phys = 1,
+		.privilege = 0,
+		.granularity = 1,
+		.is32 = 1,
+		.is64 = 0
+	};
 
-	lgdt(KERNEL_END, 23);
+	GDTSegment kcode64 = {
+		.limit = 0xFFFFF,
+		.accessed = 1,
+		.readwrite = 1,
+		.direct_conform = 0,
+		.exec = 1,
+		.phys = 1,
+		.privilege = 0,
+		.granularity = 1,
+		.is32 = 0,
+		.is64 = 1
+	};
+
+	GDTSegment kdata64 = {
+		.limit = 0xFFFFF,
+		.accessed = 1,
+		.readwrite = 1,
+		.direct_conform = 0,
+		.exec = 0,
+		.phys = 1,
+		.privilege = 0,
+		.granularity = 1,
+		.is32 = 0,
+		.is64 = 1
+	};
+
+
+	encodeGDTEntry32(&gdtarray[0x00], nulle, 0);
+	encodeGDTEntry32(&gdtarray[0x08], kcode32, 0);
+	encodeGDTEntry32(&gdtarray[0x10], kdata32, 0);
+	encodeGDTEntry32(&gdtarray[0x18], kcode64, 0);
+	encodeGDTEntry32(&gdtarray[0x20], kdata64, 0);
+
+	lgdt(gdtarray, 0x27);
+
+	asm volatile (
+		"xchgw %bx, %bx\n"
+	);
+
+	// reload_segs(0x8, 0x10);
 
 	// for (int i = 0; i!=10;i++) {
 	// 	printf("%x %x %x %x %x %x %x %x\n", isr_table[i * 8 + 0], isr_table[i * 8 + 1], isr_table[i * 8 + 2], isr_table[i * 8 + 3], isr_table[i * 8 + 4], isr_table[i * 8 + 5], isr_table[i * 8 + 6], isr_table[i * 8 + 7]);
@@ -105,6 +157,7 @@ void kernel_main(void)
 	}
 
 	PIC_remap(0x20, 0x28);
+	
 
 	for (int x=0;x!=16;x++) {
 			IRQ_set_mask(x);
@@ -119,6 +172,83 @@ void kernel_main(void)
 	// ps2_init();
 
 	init_pages();
+
+
+	// encodeGDTEntry32(&gdtarray[0x08], kcode64, 0);
+	// encodeGDTEntry32(&gdtarray[0x10], kdata64, 0);
+	// lgdt(gdtarray, 23);
+
+	printf("lgdt2\n");
+
+	// asm volatile (
+	// 	"xchgw %bx, %bx\n"
+	// );
+ 
+	uint32_t eflags;
+    asm (
+        "pushf\n"
+        "pop %0"
+        : "=g" (eflags)
+    );
+    uint32_t cs = 0x18;
+    uint32_t rsp = stack_top;
+    uint32_t ss = 0x20;
+
+    struct fp {
+        uint32_t offset;
+        uint16_t segment;
+    } __attribute__((packed));
+    struct fp lptr;
+    lptr.segment = 0x18;
+    lptr.offset = (uint32_t) main64;
+
+
+
+    asm volatile (
+        ".global main64\n"
+        // "push %[ss64]\n"
+        // // "push $0\n"
+        // "push %[rsp]\n"
+        // // "push $0\n"
+        // "push %[rflags]\n"
+        // // "push $0\n"
+        // "push %[cs64]\n"
+        // // "push $0\n"
+        // "push main64\n"
+        // // "push $0\n"
+        // "iret\n"
+		// "xchgw %%bx, %%bx\n"
+        // "mov $0x10, %%ax\n"
+        // "mov %%ax, %%ds\n"
+        // "mov %%ax, %%es\n"
+        // "mov %%ax, %%fs\n"
+        // "mov %%ax, %%gs\n"
+        // "mov %%ax, %%ss\n"
+		// "push $0x08\n"
+		// "lea %%rax, .reload_CS(%%rip)\n"
+		// "push %%rax\n"
+		// "lretq\n"
+		"xchgw %%bx, %%bx\n"
+
+
+        "jmp $0x18, $main64\n"
+        ".code64\n"
+        "main64:\n"
+        "xor %%rax, %%rax\n"
+        "mov $0xFFFFFFFFFFFFFFFF, %%rax\n"
+        "mov %%rax, 0xB8000\n"
+		"hlt\n"
+        ".code32\n"
+        :: [lptr] "m" (lptr)
+        // ::  [ss] "g" (ss),
+        //     [rsp] "g" (rsp),
+        //     [eflags] "g" (eflags),
+        //     [cs] "g" (cs)
+            // [rip] "g" (rip)
+        : "rax"
+    );
+
+	printf("here in 32-bit mode\n");
 
 	while (1) {
 	}

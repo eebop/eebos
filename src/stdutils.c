@@ -19,7 +19,7 @@ void *malloc(uint32_t size) {
 }
 
 void *malloc_aligned(uint32_t size, uint32_t alignment) {
-	malloc((alignment - (size & (alignment - 1))) % alignment);
+	malloc((alignment - (((uint32_t) memptr) & (alignment - 1))) % alignment);
 	return malloc(size);
 }
 
@@ -51,7 +51,7 @@ static inline uint8_t vga_entry_color(enum vga_color fg, enum vga_color bg)
 
 static inline uint16_t vga_entry(unsigned char uc, uint8_t color)
 {
-	return (uint16_t)uc | (uint16_t)color << 8;
+	return (uint16_t) uc | (uint16_t)color << 8;
 }
 
 size_t strlen(const char *str)
