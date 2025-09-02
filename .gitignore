@@ -8,4 +8,4 @@ makefile.deps
 
 # Added by cargo
 
-/target
+*/target

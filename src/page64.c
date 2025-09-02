@@ -162,21 +162,26 @@ void init_pages() {
         : "=g" (cr3)
         : "r" (data)
     );
-    printf("cr3 is: %x\n", cr3);
-
     asm volatile (
-
         "mov %%cr0, %%eax\n"
-        "or $0x80000001, %%eax\n"
+        "or $0x80000000, %%eax\n"
         "mov %%eax, %%cr0\n"
         ::: "%eax"
     );
 
-    uint32_t cr = 100;
-    asm (
-        "mov %%cr0, %0"
-        : "=r" (cr)
+}
+
+void call64(uint32_t ptr) {
+        asm volatile (
+        "xchgw %%bx, %%bx\n"
+        ".global tramp64\n"
+        "jmp $0x18, $tramp64\n"
+        "mov $0x55FF55FF, %%eax\n"
+        ".code64\n"
+        "tramp64:\n"
+        "xor %%rbx, %%rbx\n"
+        "hlt"
+        ::: "%eax"
     );
-    printf("cr0 is: %b\n", cr);
 
 }

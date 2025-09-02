@@ -1,0 +1,4 @@
+#!/bin/bash
+objdump -d --demangle=rust build/mods/$1
+echo
+readelf -aW --demangle=rust build/mods/$1

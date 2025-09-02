@@ -1,0 +1,2 @@
+[build]
+rustflags = ["-Cno-redzone=true", "-Crelocation-model=pie", "-Ccode-model=small"]

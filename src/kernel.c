@@ -6,6 +6,7 @@
 #include "pic.h"
 #include "stdutils.h"
 #include "page64.h"
+#include "sse.h"
 // #include "ps2/controller.h"
 
 
@@ -53,6 +54,12 @@ void io_wait2(void) {
 }
 
 extern void main64(void);
+extern void rustmain(uint8_t *ptr);
+
+
+extern uint8_t _binary_test_mod_start;
+extern uint8_t _binary_test_mod_end;
+extern uint8_t _binary_test_mod_size;
 
 extern uint32_t stack_top;
 
@@ -133,10 +140,7 @@ void kernel_main(void)
 
 	lgdt(gdtarray, 0x27);
 
-	asm volatile (
-		"xchgw %bx, %bx\n"
-	);
-
+	initSSE();
 	// reload_segs(0x8, 0x10);
 
 	// for (int i = 0; i!=10;i++) {
@@ -169,84 +173,55 @@ void kernel_main(void)
 	
 	printf("Interrupts: %x\n", are_interrupts_enabled());
 
-	// ps2_init();
-
-	init_pages();
-
-
-	// encodeGDTEntry32(&gdtarray[0x08], kcode64, 0);
-	// encodeGDTEntry32(&gdtarray[0x10], kdata64, 0);
-	// lgdt(gdtarray, 23);
+	// init_pages();
 
 	printf("lgdt2\n");
 
-	// asm volatile (
-	// 	"xchgw %bx, %bx\n"
-	// );
- 
-	uint32_t eflags;
-    asm (
-        "pushf\n"
-        "pop %0"
-        : "=g" (eflags)
-    );
-    uint32_t cs = 0x18;
-    uint32_t rsp = stack_top;
-    uint32_t ss = 0x20;
+	// uint32_t eflags;
+    // asm (
+    //     "pushf\n"
+    //     "pop %0"
+    //     : "=g" (eflags)
+    // );
+    // uint32_t cs = 0x18;
+    // uint32_t rsp = stack_top;
+    // uint32_t ss = 0x20;
 
-    struct fp {
-        uint32_t offset;
-        uint16_t segment;
-    } __attribute__((packed));
-    struct fp lptr;
-    lptr.segment = 0x18;
-    lptr.offset = (uint32_t) main64;
+    // struct fp {
+    //     uint32_t offset;
+    //     uint16_t segment;
+    // } __attribute__((packed));
+    // struct fp lptr;
+    // lptr.segment = 0x18;
+    // lptr.offset = (uint32_t) main64;
+
+	rustmain(malloc(0));
 
 
-
-    asm volatile (
-        ".global main64\n"
-        // "push %[ss64]\n"
-        // // "push $0\n"
-        // "push %[rsp]\n"
-        // // "push $0\n"
-        // "push %[rflags]\n"
-        // // "push $0\n"
-        // "push %[cs64]\n"
-        // // "push $0\n"
-        // "push main64\n"
-        // // "push $0\n"
-        // "iret\n"
-		// "xchgw %%bx, %%bx\n"
-        // "mov $0x10, %%ax\n"
-        // "mov %%ax, %%ds\n"
-        // "mov %%ax, %%es\n"
-        // "mov %%ax, %%fs\n"
-        // "mov %%ax, %%gs\n"
-        // "mov %%ax, %%ss\n"
-		// "push $0x08\n"
-		// "lea %%rax, .reload_CS(%%rip)\n"
-		// "push %%rax\n"
-		// "lretq\n"
-		"xchgw %%bx, %%bx\n"
+    // asm volatile (
+    //     ".global main64\n"
+	// 	".global rustmain\n"
+	// 	"xchgw %%bx, %%bx\n"
 
 
-        "jmp $0x18, $main64\n"
-        ".code64\n"
-        "main64:\n"
-        "xor %%rax, %%rax\n"
-        "mov $0xFFFFFFFFFFFFFFFF, %%rax\n"
-        "mov %%rax, 0xB8000\n"
-		"hlt\n"
-        ".code32\n"
-        :: [lptr] "m" (lptr)
-        // ::  [ss] "g" (ss),
-        //     [rsp] "g" (rsp),
-        //     [eflags] "g" (eflags),
-        //     [cs] "g" (cs)
-            // [rip] "g" (rip)
-        : "rax"
-    );
+    //     "jmp $0x18, $main64\n"
+	// 	".code64\n"
+	// 	".global test64\n"
+	// 	"main64:\n"
+    //     // "xor %%rax, %%rax\n"
+    //     // "mov $0xFFFFFFFFFFFFFFFF, %%rax\n"
+    //     // "mov %%rax, 0xB8000\n"
+	// 	"call rustmain\n"
+	// 	"hlt\n"
+    //     ".code32\n"
+    //     :: [lptr] "m" (lptr)
+    //     // ::  [ss] "g" (ss),
+    //     //     [rsp] "g" (rsp),
+    //     //     [eflags] "g" (eflags),
+    //     //     [cs] "g" (cs)
+    //         // [rip] "g" (rip)
+    //     : "rax"
+    // );
 
 	printf("here in 32-bit mode\n");
 

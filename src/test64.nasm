@@ -1,3 +1,5 @@
+[BITS 64]
+
 global main64
 
 main64:

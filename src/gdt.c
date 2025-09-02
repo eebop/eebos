@@ -86,6 +86,14 @@ void lgdt(uint8_t *target, uint16_t size) {
 
     asm (
         "lgdt %0\n"
+        "jmp $0x08, $reload_cs\n"
+        "reload_cs:\n"
+        "mov $0x10, %%ax\n"
+        "mov %%ax, %%ds\n"
+        "mov %%ax, %%es\n"
+        "mov %%ax, %%fs\n"
+        "mov %%ax, %%gs\n"
+        "mov %%ax, %%ss\n"
 
         :: "m" (gdtr)
     );
