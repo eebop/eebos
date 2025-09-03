@@ -13,7 +13,7 @@
 #[rustc_std_internal_symbol]
 fn __rust_no_alloc_shim_is_unstable_v2() {}
 
-// I have kno idea why I need this and why #[alloc_error_handler] doesn't work
+// I have no idea why I need this and why #[alloc_error_handler] doesn't work
 
 #[rustc_std_internal_symbol]
 fn __rust_alloc_error_handler(_: core::alloc::Layout) -> ! {
@@ -240,6 +240,8 @@ pub extern "C" fn rustmain(mem: *mut u8) -> ! {
 
     let x = file.segments().expect("Can't get segments!");
 
+    let got = file.section_header_by_name(".got").expect(".got currently required as is necessary for PIE").expect(".got currently required as is necessary for PIE");
+
     let mut relocations: Vec<RelocInfo> = Vec::new();
     let mut slices: Vec<&'static mut [u8]> = Vec::new();
 
@@ -261,21 +263,20 @@ pub extern "C" fn rustmain(mem: *mut u8) -> ! {
                 // Allocate a.p_memsz bytes into data. data & !(a.p_align - 1) must equal a.p_vaddr & !(a.p_align - 1)
                 // Then, copy code[a.p_offset..a.p_offset + a.p_filesz] into data
                 let start_mptr = (a.p_vaddr as usize) & !(a.p_align as usize - 1);
-                let start_fptr = (a.p_offset as usize) & !(a.p_align as usize - 1);
+                let start_fptr = (a.p_offset as usize);
 
                 let size_fptr = a.p_filesz as usize;
                 let size_mptr = a.p_memsz as usize;
 
                 let slice = &code[start_fptr..start_fptr + size_fptr];
 
-                let offset = start_mptr & (a.p_align as usize - 1); // aligned will give us a block starting at 10...0, so we need to offset our data
+                let offset = start_mptr & (a.p_align as usize - 1); // aligned will give us a block starting at 2^n, so we need to offset our data
 
                 let data = &mut aligned_slice::<u8>(offset + size_mptr, a.p_align as usize)[offset..];
                 
                 data[..size_fptr].copy_from_slice(slice);
 
-                writeln!(&mut s, "relocating... {:x} {{aka {:x}}} -> {:p} (not {:x}) [{:x}]", a.p_vaddr, start_fptr, data, start_mptr, a.p_memsz);
-
+                
                 relocations.push(RelocInfo { cmd: a, start: unsafe {data.as_ptr() as usize}, length: data.len()});
                 slices.push(data);
             },
@@ -416,8 +417,6 @@ pub extern "C" fn rustmain(mem: *mut u8) -> ! {
 
     writeln!(&mut s, "here2!");
 
-    let got = file.section_header_by_name(".got").expect(".got currently required as is necessary for PIE").expect(".got currently required as is necessary for PIE");
-
     let (table, index) = relocate_symbol(got.sh_addr, &relocations);
 
     let index: usize = index.try_into().unwrap();
@@ -440,24 +439,22 @@ pub extern "C" fn rustmain(mem: *mut u8) -> ! {
     }
 
     writeln!(&mut s, "data is: {:x?}, {:p}", data, data);
-    writeln!(&mut s, "intermediate data: {:x?}", reinterpret_slice::<u8, u32>(&code[got.sh_offset as usize..got.sh_offset as usize + 16]));
-
-
-    loop {}
 
     for elem in data[3..].iter_mut() {
         // if *elem != 0 {
-        *elem = relocate_as_ptr(*elem as usize, &relocations) as u32
+        *elem = relocate_as_ptr(*elem as usize, &relocations) as u32;
+        // let val =  unsafe { str::from_utf8_unchecked(slice::from_raw_parts((* elem) as *const u8, 8)) };
+        // writeln!(&mut s, "elem now is {:x?}, which points to {}", *elem, val);
         // }
     }
 
-    for mut ptr in init_fns {
-        if ptr != 0 {
-            ptr = relocate_as_ptr(ptr as usize, &relocations) as u64;
-            let fn_ptr = as_fn_ptr::<()>(ptr as usize);
-            fn_ptr();
-        }
-    }
+    // for mut ptr in init_fns {
+    //     if ptr != 0 {
+    //         ptr = relocate_as_ptr(ptr as usize, &relocations) as u64;
+    //         let fn_ptr = as_fn_ptr::<()>(ptr as usize);
+    //         fn_ptr();
+    //     }
+    // }
 
 
     writeln!(&mut s, "going to try to jump to: {:x}", relocate_as_ptr(file.ehdr.e_entry as usize, &relocations));
@@ -471,9 +468,6 @@ pub extern "C" fn rustmain(mem: *mut u8) -> ! {
 
     writeln!(&mut s, "INFO: {:x?}", relocs_dbg);
 
-
-    loop {}
-
     let ptr = as_fn_ptr::<u32>(relocate_as_ptr(file.ehdr.e_entry as usize, &relocations));
 
     unsafe { asm!("xchg bx, bx") };
@@ -481,6 +475,8 @@ pub extern "C" fn rustmain(mem: *mut u8) -> ! {
     let out = ptr();
 
     writeln!(&mut s, "Got out: {out}");
+
+    loop {}
 
     for mut ptr in fini_fns {
         if ptr != 0 {

@@ -6,7 +6,7 @@ RSC = rustc
 CFLAGS = -std=gnu23 -ffreestanding -Wall -Wextra -O2
 RSFLAGS = -O --crate-type=bin --emit=obj --target=i686-unknown-linux-gnu -C panic=abort -C lto=true -C code-model=small -C no-redzone=true
 
-QEMUFLAGS = -no-reboot -no-shutdown -d cpu_reset,int
+QEMUFLAGS = -no-reboot -no-shutdown #-d cpu_reset,int
 
 # all filenames to build, minus extension
 srcs = boot kernel stdutils gdt pic ports irq page64 core64 sse
@@ -83,7 +83,7 @@ $(builddir)/core64.o: core64/src/*.rs
 
 $(builddir)/mods/%.o: modules/%/src/main.rs modules/%/src/*.rs
 	mkdir -p build/mods
-	cd modules/$* ; cargo rustc --release -- -Ctarget-feature=+crt-static -Crelocation-model=pie --target=i686-unknown-linux-gnu
+	cd modules/$* ; cargo rustc --release -- -Ctarget-feature=+crt-static -Crelocation-model=pie --target=i686-unknown-linux-gnu -lc
 	cp modules/$*/target/release/$* $*
 	i686-elf-objcopy -I binary -O elf32-i386 $* $@
 	mv $* $(builddir)/mods/$*

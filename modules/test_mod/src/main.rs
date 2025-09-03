@@ -75,7 +75,7 @@ static mut x: u8 = 6;
 #[unsafe(no_mangle)]
 pub extern "C" fn main() -> u32 {
     let mut s = Screen { line: 0, row: 0};
-    s.clear_screen();
+    // s.clear_screen();
     writeln!(&mut s, "====Here!====");
     return 0;
 }
@@ -84,7 +84,7 @@ pub extern "C" fn main() -> u32 {
 #[unsafe(no_mangle)]
 pub extern "C" fn __libc_start_main() {
     let mut s = Screen { line: 0, row: 0};
-    s.clear_screen();
+    // s.clear_screen();
 
     writeln!(&mut s, "====Here!====");
 }
