@@ -67,7 +67,7 @@ struct SimpleAllocator;
 
 unsafe impl GlobalAlloc for SimpleAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        let align_needed = layout.size() - ((layout.size() - 1) & unsafe { DATAPTR.addr()});
+        let align_needed = layout.align() - ((layout.align() - 1) & unsafe { DATAPTR.addr()});
 
         unsafe {
             DATAPTR = DATAPTR.add(align_needed);
@@ -167,11 +167,22 @@ fn reinterpret_slice_mut<T, U>(i: &mut [T]) -> Option<&mut [U]> {
     }
 }
 
-fn aligned_slice<T: Copy + Default>(size: usize, align: usize) -> &'static mut [T] {
+fn aligned_slice<T: Copy + Default>(s: &mut Screen, size: usize, align: usize) -> &'static mut [T] {
     assert!(align.is_power_of_two());
     let layout = Layout::from_size_align(size * size_of::<T>(), cmp::max(align, align_of::<T>())).unwrap();
-    let out = unsafe {
+    let out = unsafe {        
+        
+        // unsafe {
+        //     DATAPTR = DATAPTR.add(add_on)
+        // }
+
+        // writeln!(s, "DATA is currently: {:x}", unsafe {DATAPTR as usize});
+
+
         let aligned_ptr = alloc::alloc::alloc(layout) as *mut T;
+
+
+        // writeln!(s, "Alloc; ptr is {:x}, DATA is {:x}", aligned_ptr as usize, unsafe { DATAPTR as usize});
         slice::from_raw_parts_mut(aligned_ptr, size)
     };
 
@@ -262,7 +273,6 @@ pub extern "C" fn rustmain(mem: *mut u8) -> ! {
             elf::abi::PT_LOAD => {
                 // Allocate a.p_memsz bytes into data. data & !(a.p_align - 1) must equal a.p_vaddr & !(a.p_align - 1)
                 // Then, copy code[a.p_offset..a.p_offset + a.p_filesz] into data
-                let start_mptr = (a.p_vaddr as usize) & !(a.p_align as usize - 1);
                 let start_fptr = (a.p_offset as usize);
 
                 let size_fptr = a.p_filesz as usize;
@@ -270,10 +280,18 @@ pub extern "C" fn rustmain(mem: *mut u8) -> ! {
 
                 let slice = &code[start_fptr..start_fptr + size_fptr];
 
-                let offset = start_mptr & (a.p_align as usize - 1); // aligned will give us a block starting at 2^n, so we need to offset our data
+                let offset = a.p_vaddr as usize & (a.p_align as usize - 1); // aligned will give us a block starting at 2^n, so we need to offset our data
 
-                let data = &mut aligned_slice::<u8>(offset + size_mptr, a.p_align as usize)[offset..];
+                writeln!(&mut s, "offset is {:x}", offset);
+
+                let data = aligned_slice::<u8>(&mut s, offset + size_mptr, a.p_align as usize);
                 
+                writeln!(&mut s, "ptr: {:x}", unsafe {data.as_ptr() as usize});
+
+                let data = &mut data[offset..];
+
+                writeln!(&mut s, "ptr: {:x  }", unsafe {data.as_ptr() as usize});
+
                 data[..size_fptr].copy_from_slice(slice);
 
                 
@@ -373,8 +391,6 @@ pub extern "C" fn rustmain(mem: *mut u8) -> ! {
         }
     }
 
-    writeln!(&mut s, "here1!");
-
     if let (Some(rinit_ptr), Some(rinit_size)) = (init_ptr, init_size) {
         writeln!(&mut s, "rinits: {:x}, {:x}, {:x}", rinit_ptr, rinit_size, code.len());
 
@@ -406,16 +422,14 @@ pub extern "C" fn rustmain(mem: *mut u8) -> ! {
             panic!("Error FINI_ARRAY but not FINI_ARRAYSZ or visa versa");
         };
     }
-    writeln!(&mut s, "inits: {:x?}\nfinis: {:x?}", init_fns, fini_fns);
+    // writeln!(&mut s, "inits: {:x?}\nfinis: {:x?}", init_fns, fini_fns);
 
 
-    debug_section(&mut s, ".got", &file);
+    // debug_section(&mut s, ".got", &file);
     // debug_section(&mut s, ".got.plt", &file);
 
     
     // unsafe { call64(0); }
-
-    writeln!(&mut s, "here2!");
 
     let (table, index) = relocate_symbol(got.sh_addr, &relocations);
 
@@ -442,9 +456,10 @@ pub extern "C" fn rustmain(mem: *mut u8) -> ! {
 
     for elem in data[3..].iter_mut() {
         // if *elem != 0 {
+        let old = *elem;
         *elem = relocate_as_ptr(*elem as usize, &relocations) as u32;
         // let val =  unsafe { str::from_utf8_unchecked(slice::from_raw_parts((* elem) as *const u8, 8)) };
-        // writeln!(&mut s, "elem now is {:x?}, which points to {}", *elem, val);
+        writeln!(&mut s, "relocating {:x?} to {:x?}", old, *elem);
         // }
     }
 
