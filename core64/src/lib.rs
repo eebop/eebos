@@ -472,9 +472,6 @@ pub extern "C" fn rustmain(mem: *mut u8) -> ! {
     // }
 
 
-    writeln!(&mut s, "going to try to jump to: {:x}", relocate_as_ptr(file.ehdr.e_entry as usize, &relocations));
-    writeln!(&mut s, "the first 16 bytes of which are: {:x?}", unsafe { slice::from_raw_parts(relocate_as_ptr(file.ehdr.e_entry as usize, &relocations) as *const u8, 16) });
-
     let mut relocs_dbg = Vec::<(usize, usize, usize)>::new();
 
     for reloc in &relocations {

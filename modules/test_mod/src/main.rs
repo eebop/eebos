@@ -13,6 +13,11 @@ fn panic<'a, 'b>(_: &'a PanicInfo<'b>) -> ! {
     loop {}
 }
 
+#[unsafe(no_mangle)]
+pub extern "C" fn __libc_start_main() {
+    main();
+}
+
 struct Screen {
     line: usize,
     row: usize
@@ -77,14 +82,6 @@ pub extern "C" fn main() -> u32 {
     let mut s = Screen { line: 0, row: 0};
     // s.clear_screen();
     writeln!(&mut s, "====Here!====");
+    unsafe {asm!("int 0")};
     return 0;
-}
-
-
-#[unsafe(no_mangle)]
-pub extern "C" fn __libc_start_main() {
-    let mut s = Screen { line: 0, row: 0};
-    // s.clear_screen();
-
-    writeln!(&mut s, "====Here!====");
 }

@@ -154,6 +154,8 @@ void kernel_main(void)
 	entry.segment = 0x08;
 	entry.gate = 0xF;
 
+	printf("out: %x\n", isr_table[0]);
+
 	for (int i = 0; i != 256; i++)
 	{
 		entry.offset = (uint32_t) isr_table[i];
@@ -195,7 +197,7 @@ void kernel_main(void)
     // lptr.segment = 0x18;
     // lptr.offset = (uint32_t) main64;
 
-	rustmain(malloc(0));
+	// rustmain(malloc(0));
 
 
     // asm volatile (
