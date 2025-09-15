@@ -1,8 +1,8 @@
 #include "gdt.h"
 
 typedef struct __attribute__((packed)) {
-    uint32_t base;
     uint16_t limit;
+    uint32_t base;
 } dtr;
 
 

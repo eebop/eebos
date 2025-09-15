@@ -7,6 +7,7 @@
 
 #![allow(internal_features)]
 #![feature(rustc_attrs)]
+#![feature(ptr_as_ref_unchecked)]
 
 // This symbol is required for an allocator to work with --emit obj in no_std
 // My understanding is that it "tells" the compiler that you know what you're doing
@@ -29,6 +30,8 @@ use elf::{self, endian::AnyEndian, segment::ProgramHeader, ElfBytes};
 
 #[macro_use]
 extern crate alloc;
+
+mod syscall;
 
 #[panic_handler]
 fn panic<'a, 'b>(info: &'a PanicInfo<'b>) -> ! {
@@ -246,7 +249,12 @@ pub extern "C" fn rustmain(mem: *mut u8) -> ! {
     };
     
     writeln!(&mut s, "{:x?}", &code[0..5]);
+    
+    load_elf(code);
 
+}
+
+fn load_elf(code: &[u8]) {
     let file = ElfBytes::<AnyEndian>::minimal_parse(code).expect("Can't parse!");
 
     let x = file.segments().expect("Can't get segments!");

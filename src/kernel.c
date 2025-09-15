@@ -28,12 +28,30 @@ extern uint8_t KERNEL_START_RW[];
 
 extern uint8_t KERNEL_END[];
 
-void badexcept(void)
-{
-	printf("test interupt caught\n");
-	PIC_sendEOI(8);
-	while (1) {}
-}
+typedef struct {
+	uint32_t interrupt;
+	uint32_t edi;
+	uint32_t esi;
+	uint32_t ebp;
+	uint32_t edx;
+	uint32_t ecx;
+	uint32_t ebx;
+	uint32_t eax;
+	uint32_t esp;
+	uint32_t eip;
+	uint32_t cs; // upper 16 bits must be 0 (must be u32 for alignment reasons)
+	uint32_t eflags;
+	// TODO: add mmx, etc
+} regs;
+
+void (*interrupts[256])(regs *) = {};
+
+// void isr_handler(regs *r) {
+// 	if (interrupts[r->interrupt] != 0) {
+// 		interrupts[r->interrupt](r);
+// 	}
+// 	return;
+// }
 
 static inline bool are_interrupts_enabled()
 {
@@ -149,6 +167,9 @@ void kernel_main(void)
 
 	printf("TEST AFTER GDT\n");
 
+
+	uint8_t *idtarray = malloc(256 * 8);
+
 	IDTEntry entry;
 	entry.privilege = 0;
 	entry.segment = 0x08;
@@ -159,7 +180,7 @@ void kernel_main(void)
 	for (int i = 0; i != 256; i++)
 	{
 		entry.offset = (uint32_t) isr_table[i];
-		encodeIDTEntry(&KERNEL_END[0x18 + 8 * i], entry);
+		encodeIDTEntry(&idtarray[8 * i], entry);
 	}
 
 	PIC_remap(0x20, 0x28);
@@ -171,34 +192,13 @@ void kernel_main(void)
 
 	IRQ_clear_mask(2);
 
-	lidt(&KERNEL_END[0x18], 256 * 8 - 1);
+	lidt(idtarray, 256 * 8 - 1);
 	
 	printf("Interrupts: %x\n", are_interrupts_enabled());
 
 	// init_pages();
 
 	printf("lgdt2\n");
-
-	// uint32_t eflags;
-    // asm (
-    //     "pushf\n"
-    //     "pop %0"
-    //     : "=g" (eflags)
-    // );
-    // uint32_t cs = 0x18;
-    // uint32_t rsp = stack_top;
-    // uint32_t ss = 0x20;
-
-    // struct fp {
-    //     uint32_t offset;
-    //     uint16_t segment;
-    // } __attribute__((packed));
-    // struct fp lptr;
-    // lptr.segment = 0x18;
-    // lptr.offset = (uint32_t) main64;
-
-	// rustmain(malloc(0));
-
 
     // asm volatile (
     //     ".global main64\n"
@@ -227,6 +227,22 @@ void kernel_main(void)
 
 	printf("here in 32-bit mode\n");
 
+	int x = 10;
+	int o = 5;
+
+	asm("push %[x]\n"
+		"mov $3, %%ebx\n"
+		"xchgw %%bx, %%bx\n"
+		"int $0x8f\n"
+		"mov %%ebx, %[o]\n"
+		"pop %[x]\n"
+		: [x] "+r" (x),
+		  [o] "=g" (o)
+		:: "ebx"
+	);
+
+	printf("debug: %d = 10, %d (ebx) = 3", x, o);
+	
 	while (1) {
 	}
 

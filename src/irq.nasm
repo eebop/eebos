@@ -1,70 +1,50 @@
-extern badexcept
+extern isr_handler
 
-%macro isr_err_stub 1
-isr_stub_%+%1:
-    call badexcept
-    iret
+%macro isr 1
+isr_%+%1: ; we just came in from a int
+          ; which pushed the following data to the stack:
+          ; EIP CS (zero-padded to dword) EFLAGS
+    push esp
+    push eax
+    push ebx
+    push ecx
+    push edx
+    push ebp
+    push esi
+    push edi
+
+    lea eax, [esp] ; eax now stores where we placed our data
+    push DWORD %1
+    
+    sub esp, 0x0c ; We need to align with at least 3 slots left
+    and esp, 0xFFFFFFEF ; align to nearest sixteenbyte
+    add esp, 0x04 ; however, call will push a byte so we need to be off that sixteenbyte
+    mov [esp+4], eax ; this is for us to remember where we stored the data
+    mov [esp], eax ; this is the *T arg to isr_handler
+    call isr_handler
+    pop esp ; remember where we placed the data (offset by aligning)
+
+    pop edi
+    pop esi
+    pop ebp
+    pop edx
+    pop ecx
+    pop ebx
+    pop eax
+    pop esp
+    iretd
 %endmacro
 
-%macro isr_err 2
-isr_stub_%+%1:
-    extern %2
-    pusha
-    call %2
-    popa
-    iret
-%endmacro
-
-isr_err_stub 0
-isr_err_stub 1
-isr_err_stub 2
-isr_err_stub 3
-isr_err_stub 4
-isr_err_stub 5
-isr_err_stub 6
-isr_err_stub 7
-isr_err_stub 8
-isr_err_stub 9
-isr_err_stub 10
-isr_err_stub 11
-isr_err_stub 12
-isr_err_stub 13
-isr_err_stub 14
-isr_err_stub 15
-isr_err_stub 16
-isr_err_stub 17
-isr_err_stub 18
-isr_err_stub 19
-isr_err_stub 20
-isr_err_stub 21
-isr_err_stub 22
-isr_err_stub 23
-isr_err_stub 24
-isr_err_stub 25
-isr_err_stub 26
-isr_err_stub 27
-isr_err_stub 28
-isr_err_stub 29
-isr_err_stub 30
-isr_err_stub 31
-isr_err_stub 32
-isr_err_stub 33; isr_err 33, keyboard_in
-isr_err_stub 34
-isr_err_stub 35
-isr_err_stub 36
-isr_err_stub 37
-isr_err_stub 38
-isr_err_stub 39
-isr_err_stub 40
-isr_err_stub 41
-isr_err_stub 42
-isr_err_stub 43
-isr_err_stub 44;isr_err 44, mouse_in
+%assign i 0
+%rep 256
+    isr i
+    %assign i i+1
+%endrep
 
 global isr_table
 isr_table:
-%assign i 0 
-%rep 45
-    dd isr_stub_%+i
-    %assign i i+1 
+%assign i 0
+%rep 256
+    dd isr_%+i
+    %assign i i+1
 %endrep
