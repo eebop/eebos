@@ -8,7 +8,6 @@
 #![allow(internal_features)]
 #![feature(rustc_attrs)]
 #![feature(ptr_as_ref_unchecked)]
-#![feature(const_trait_impl)]
 
 // This symbol is required for an allocator to work with --emit obj in no_std
 // My understanding is that it "tells" the compiler that you know what you're doing
@@ -32,7 +31,9 @@ use elf::{self, endian::AnyEndian, segment::ProgramHeader, ElfBytes};
 #[macro_use]
 extern crate alloc;
 
+mod screen;
 mod syscall;
+use screen::Screen;
 
 #[panic_handler]
 fn panic<'a, 'b>(info: &'a PanicInfo<'b>) -> ! {
@@ -88,63 +89,6 @@ unsafe impl GlobalAlloc for SimpleAllocator {
 
 #[global_allocator]
 static ALLOCATOR: SimpleAllocator = SimpleAllocator;
-
-struct Screen {
-    line: usize,
-    row: usize
-}
-
-impl Screen {
-    pub fn coord(&self) -> usize {
-        return self.line * 80 + self.row;
-    }
-
-    pub fn write_byte(&mut self, c: u8) {
-        let screen: &mut [u16] = unsafe {
-            slice::from_raw_parts_mut(0xB8000 as *mut u16, 25 * 80)
-        };
-
-        if c == b'\n' {
-            while self.row != 80 {
-                screen[self.coord()] = (screen[self.coord()] & 0xFF00) | (b' ' as u16);
-                self.row += 1;
-            }
-            self.row = 0;
-            self.line += 1;
-            if self.line == 25 {
-                self.line = 0;
-            }
-            return;
-        }
-
-        screen[self.coord()] = (screen[self.coord()] & 0xFF00) | (c as u16);
-
-        self.row += 1;
-        if self.row == 80 {
-            self.row = 0;
-            self.line += 1;
-            if self.line == 25 {
-                self.line = 0;
-            }
-        }
-    }
-
-    pub fn clear_screen(&mut self) {
-        for _ in 0..(25 * 80) {
-            self.write_byte(b' ');
-        }
-    }
-
-}
-
-impl fmt::Write for Screen {
-    fn write_str(&mut self, s: &str) -> core::fmt::Result {
-        for byte in s.as_bytes() {
-            self.write_byte(*byte);
-        }
-        Ok(())
-    }
-}
 
 fn reinterpret_slice<T, U>(i: &[T]) -> Option<&[U]> {
     let size = i.len() * size_of::<T>();
@@ -251,11 +195,11 @@ pub extern "C" fn rustmain(mem: *mut u8) -> ! {
     
     writeln!(&mut s, "{:x?}", &code[0..5]);
     
-    load_elf(code);
-
+    load_elf(s, code);
+    loop {}
 }
 
-fn load_elf(code: &[u8]) {
+fn load_elf(mut s: Screen, code: &[u8]) {
     let file = ElfBytes::<AnyEndian>::minimal_parse(code).expect("Can't parse!");
 
     let x = file.segments().expect("Can't get segments!");
@@ -282,7 +226,7 @@ fn load_elf(code: &[u8]) {
             elf::abi::PT_LOAD => {
                 // Allocate a.p_memsz bytes into data. data & !(a.p_align - 1) must equal a.p_vaddr & !(a.p_align - 1)
                 // Then, copy code[a.p_offset..a.p_offset + a.p_filesz] into data
-                let start_fptr = (a.p_offset as usize);
+                let start_fptr = a.p_offset as usize;
 
                 let size_fptr = a.p_filesz as usize;
                 let size_mptr = a.p_memsz as usize;
@@ -497,8 +441,6 @@ fn load_elf(code: &[u8]) {
 
     writeln!(&mut s, "Got out: {out}");
 
-    loop {}
-
     for mut ptr in fini_fns {
         if ptr != 0 {
             ptr = relocate_as_ptr(ptr as usize, &relocations) as u64;
@@ -506,7 +448,4 @@ fn load_elf(code: &[u8]) {
             fn_ptr();
         }
     }
-
-
-    loop {};
 }
