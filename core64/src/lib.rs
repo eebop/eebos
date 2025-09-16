@@ -8,6 +8,7 @@
 #![allow(internal_features)]
 #![feature(rustc_attrs)]
 #![feature(ptr_as_ref_unchecked)]
+#![feature(const_trait_impl)]
 
 // This symbol is required for an allocator to work with --emit obj in no_std
 // My understanding is that it "tells" the compiler that you know what you're doing

@@ -31,7 +31,7 @@ isr_%+%1: ; we just came in from a int
     pop ecx
     pop ebx
     pop eax
-    pop esp
+    add esp, 4 ; We can't pop esp because then iretd is mangled
     iretd
 %endmacro
 
