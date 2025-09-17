@@ -4,15 +4,16 @@ use core::{mem, slice::from_raw_parts_mut};
 use core::ptr::NonNull;
 use core::arch::asm;
 use core::fmt::Write;
+use ::alloc::collections::BTreeMap;
+use ::alloc::boxed::Box;
 use core::*;
-use alloc::collections::BTreeMap;
 use ::alloc::vec;
 use core::cell::{Ref, RefCell};
 use zerocopy::{self, FromBytes, IntoBytes, KnownLayout};
 
 #[repr(C)]
 #[derive(Debug)]
-struct SysCallData {
+pub struct SysCallData {
 	interrupt: u32, // actually u8 (u32 for alignment reasons)
 	edi: u32,
 	esi: u32,
@@ -27,54 +28,45 @@ struct SysCallData {
 	eflags: u32,
 }
 
-const SCREEN: RefCell<Screen> = RefCell::new(Screen { line: 0, row: 0 });
-const INTERRUPTS: RefCell<BTreeMap<u8, fn(&SysCallData)>> = RefCell::new(BTreeMap::new()); 
+pub const SCREEN: RefCell<Screen> = RefCell::new(Screen { line: 0, row: 0 });
+pub const INTERRUPTS: RefCell<BTreeMap<u8, fn(&mut SysCallData)>> = RefCell::new(BTreeMap::new()); 
 
-// Makes a syscall and then interprets the return value
-// User side api
-fn make_syscall<T: IntoBytes + FromBytes + KnownLayout, U: IntoBytes + FromBytes + KnownLayout, const channel: u8>(mut data: T) -> Option<&'static mut U> {
-	let data = data.as_mut_bytes();
-	let (mut data, mut size) = (data.as_mut_ptr(), data.len() as u32);
-	unsafe { asm! (
-		"mov eax, esp",
-		"int {0}",
-		"mov esp, eax",
-		const channel,
-		inlateout("ecx") data,
-		inlateout("edx") size
-	) };
-	let data: &mut [u8] = unsafe { slice::from_raw_parts_mut(data, size as usize) };
+impl SysCallData {
+	// Interprets the syscall abi to receive a element of T
+	// OS side api
+	fn receive_abi<T: IntoBytes + FromBytes + KnownLayout + ?Sized>(&self) -> Option<&'static mut T> {
+		let data = unsafe { 
+			core::slice::from_raw_parts_mut(self.ecx as *mut u8, self.edx as usize)
+		};
+		match T::mut_from_bytes(data) {
+			Ok(d) => Some(d),
+			Err(_) => None
+		}
+	}
 
-	match U::mut_from_bytes(data) {
-		Ok(d) => Some(d),
-		Err(_) => None
+	// Configures SysCallData to read having a member of T
+	// OS side api
+	fn send_abi<T: IntoBytes + FromBytes + KnownLayout + ?Sized>(&mut self, mut val: Box<T>) {
+		let data = val.as_mut_bytes();
+		let (data, size) = (data.as_mut_ptr(), data.len());
+		self.ecx = data as u32;
+		self.edx = size as u32;
 	}
 }
 
-// Interprets the syscall abi to receive a element of T
-// OS side api
-fn receive_abi<T: IntoBytes + FromBytes + KnownLayout>(data: &SysCallData) -> Option<&'static mut T> {
-	let data = unsafe { 
-		core::slice::from_raw_parts_mut(data.ecx as *mut u8, data.edx as usize)
-	};
-	match T::mut_from_bytes(data) {
-		Ok(d) => Some(d),
-		Err(_) => None
-	}
+pub fn submit_syscall_syscall(cmd: &mut SysCallData) {
+	let data = cmd.receive_abi::<syscall_std::NewSysCall>().unwrap();
+	let ptr: fn(&mut SysCallData) = unsafe { core::mem::transmute(data.ptr) };
+	INTERRUPTS.borrow_mut().insert(data.channel, ptr);
+	
+	cmd.send_abi::<()>(Box::new(()));
 }
 
-// Configures SysCallData to read having a member of T
-// OS side api
-fn send_abi<T: IntoBytes + FromBytes + KnownLayout>(mut val: T, regs: &mut SysCallData) {
-	let data = val.as_mut_bytes();
-	let (data, size) = (data.as_mut_ptr(), data.len());
-	regs.ecx = data as u32;
-	regs.edx = size as u32;
-}
+pub fn debug_print_syscall(cmd: &mut SysCallData) {
+	let data = cmd.receive_abi::<[u8]>().unwrap();
+	let data = core::str::from_utf8_mut(data).unwrap();
 
-// fn submit_syscall_syscall(cmd: &SysCallData) {
-//     INTERRUPTS.borrow_mut().insert(key, value)
-// }
+}
 
 #[unsafe(no_mangle)]
 extern "C" fn isr_handler(regs: *mut SysCallData) {
@@ -85,8 +77,6 @@ extern "C" fn isr_handler(regs: *mut SysCallData) {
 	s.clear_screen();
 	writeln!(&mut s, "data is: {}", regs.interrupt);
 	writeln!(&mut s, "data: {:#x?}", regs);
-
-	loop {};
 
 	match INTERRUPTS.borrow().get(&regs.interrupt.try_into().unwrap()) {
 		Some(syscall) => {

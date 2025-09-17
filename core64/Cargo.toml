@@ -3,13 +3,7 @@ name = "core64"
 version = "0.1.0"
 edition = "2024"
 
-
-[profile.release]
-panic = "abort"
-
-[profile.dev]
-panic = "abort"
-
 [dependencies]
 elf = { version = "0.8.0", default-features = false }
+syscall_std = { version = "0.1.0", path = "../syscall_std" }
 zerocopy = { version = "0.8.27", default-features = false, features = ["alloc", "derive", "float-nightly", "simd", "zerocopy-derive"] }

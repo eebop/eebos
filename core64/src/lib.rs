@@ -189,6 +189,8 @@ pub extern "C" fn rustmain(mem: *mut u8) -> ! {
 
     s.clear_screen();
 
+    syscall::INTERRUPTS.borrow_mut().insert(0x30, syscall::submit_syscall_syscall);
+
     let code = unsafe {
         core::slice::from_raw_parts(&_binary_test_mod_start as *const u8, &_binary_test_mod_size as *const u8 as usize)
     };
