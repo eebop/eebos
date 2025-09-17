@@ -15,12 +15,13 @@ isr_%+%1: ; we just came in from a int
 
     lea eax, [esp] ; eax now stores where we placed our data
     push DWORD %1
-    
+    lea ebx, [esp] ; .. and ebx includes the interrupt
+
     sub esp, 0x0c ; We need to align with at least 3 slots left
     and esp, 0xFFFFFFEF ; align to nearest sixteenbyte
     add esp, 0x04 ; however, call will push a byte so we need to be off that sixteenbyte
     mov [esp+4], eax ; this is for us to remember where we stored the data
-    mov [esp], eax ; this is the *T arg to isr_handler
+    mov [esp], ebx ; this is the *T arg to isr_handler
     call isr_handler
     pop esp ; remember where we placed the data (offset by aligning)
 
