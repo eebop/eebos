@@ -2,6 +2,22 @@
 #![no_std]
 #![no_main]
 
+use alloc::{GlobalAlloc, Layout};
+
+pub struct Allocator;
+
+unsafe impl GlobalAlloc for Allocator {
+    unsafe fn alloc(&self, _layout: Layout) -> *mut u8 {
+        0 as *mut u8
+    }
+    unsafe fn dealloc(&self, _ptr: *mut u8, _layout: Layout) {
+        unreachable!();     // since we never allocate
+    }
+}
+
+#[global_allocator]
+static GLOBAL_ALLOCATOR: Allocator = Allocator;
+
 use core::panic::PanicInfo;
 
 use core::arch::asm;
@@ -75,13 +91,13 @@ impl fmt::Write for Screen {
     }
 }
 
-static mut x: u8 = 6;
-
 #[unsafe(no_mangle)]
 pub extern "C" fn main() -> u32 {
     let mut s = Screen { line: 0, row: 0};
     // s.clear_screen();
     writeln!(&mut s, "====Here!====");
-    unsafe {asm!("int 0")};
+
+    syscall_std::make_syscall::<u32, (), 0xff>(0x1f1f);
+
     return 0;
 }

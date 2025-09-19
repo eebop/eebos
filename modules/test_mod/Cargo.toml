@@ -7,3 +7,4 @@ edition = "2024"
 panic = "abort"
 
 [dependencies]
+syscall_std = { version = "0.1.0", path = "../../syscall_std" }

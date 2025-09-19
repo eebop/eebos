@@ -6,4 +6,3 @@ edition = "2024"
 [dependencies]
 elf = { version = "0.8.0", default-features = false }
 syscall_std = { version = "0.1.0", path = "../syscall_std" }
-zerocopy = { version = "0.8.27", default-features = false, features = ["alloc", "derive", "float-nightly", "simd", "zerocopy-derive"] }

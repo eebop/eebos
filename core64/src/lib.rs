@@ -21,6 +21,7 @@ fn __rust_alloc_error_handler(_: core::alloc::Layout) -> ! {
     panic!("memory allocation failed");
 }
 
+extern crate alloc;
 
 use core::*;
 use core::{arch::asm, alloc::{GlobalAlloc, Layout}, fmt::{Write}, panic::PanicInfo};
@@ -28,12 +29,8 @@ use alloc::vec::Vec;
 use elf::symbol;
 use elf::{self, endian::AnyEndian, segment::ProgramHeader, ElfBytes};
 
-#[macro_use]
-extern crate alloc;
-
-mod screen;
 mod syscall;
-use screen::Screen;
+use syscall_std::screen::Screen;
 
 #[panic_handler]
 fn panic<'a, 'b>(info: &'a PanicInfo<'b>) -> ! {
@@ -189,8 +186,11 @@ pub extern "C" fn rustmain(mem: *mut u8) -> ! {
 
     s.clear_screen();
 
-    syscall::INTERRUPTS.borrow_mut().insert(0x30, syscall::submit_syscall_syscall);
-
+    let mut global_state = syscall::STATE.inner.take().unwrap();
+    global_state.interrupts[0x30] = Some(syscall::submit_syscall_syscall);
+    global_state.interrupts[0xff] = Some(syscall::debug_print_syscall);
+    syscall::STATE.inner.set(Some(global_state));
+    
     let code = unsafe {
         core::slice::from_raw_parts(&_binary_test_mod_start as *const u8, &_binary_test_mod_size as *const u8 as usize)
     };

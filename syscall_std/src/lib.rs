@@ -2,33 +2,67 @@
 
 use core::*;
 use core::arch::asm;
-use zerocopy;
-use zerocopy::{IntoBytes, FromBytes, KnownLayout};
+use core::mem::MaybeUninit;
+
+pub mod screen;
+use screen::Screen;
 
 // Makes a syscall and then interprets the return value
 // User side api
-pub fn make_syscall<T: IntoBytes + FromBytes + KnownLayout, U: IntoBytes + FromBytes + KnownLayout, const CHANNEL: u8>(mut data: T) -> Option<&'static mut U> {
-	let data = data.as_mut_bytes();
-	let (mut data, mut size) = (data.as_mut_ptr(), data.len() as u32);
+pub fn make_syscall<T: Copy, U: Copy, const CHANNEL: u8>(mut data: T) -> U {
+	let mut out: MaybeUninit<U> = MaybeUninit::uninit();
 	unsafe { asm! (
 		"mov eax, esp",
 		"int {0}",
 		"mov esp, eax",
 		const CHANNEL,
-		inlateout("ecx") data,
-		inlateout("edx") size
+		in("ecx") &raw mut data,
+		in("edx") &raw mut out,
 	) };
-	let data: &mut [u8] = unsafe { slice::from_raw_parts_mut(data, size as usize) };
-
-	match U::mut_from_bytes(data) {
-		Ok(d) => Some(d),
-		Err(_) => None
-	}
+	
+	unsafe { out.assume_init() }
 }
 
-#[derive(IntoBytes, FromBytes, KnownLayout)]
-#[repr(packed)]
+#[derive(Copy, Clone)]
 pub struct NewSysCall {
 	pub channel: u8,
-	pub ptr: u32
+	pub ptr: fn(&mut SysCallData)
+}
+
+#[repr(C)]
+#[derive(Debug)]
+pub struct SysCallData {
+	pub interrupt: u32, // actually u8 (u32 for alignment reasons)
+	edi: u32,
+	esi: u32,
+	ebp: u32,
+	edx: u32,
+	ecx: u32,
+	ebx: u32,
+	eax: u32,
+	esp: u32,
+	eip: u32,
+	cs: u32, // actually u16 (u32 for alignment reasons)
+	eflags: u32,
+}
+
+pub struct State {
+	pub screen: Screen,
+	pub interrupts: [Option<fn(&mut SysCallData, &mut State)>; 256]
+}
+
+impl SysCallData {
+	// Interprets the syscall abi to receive a element of T
+	// OS side api
+	pub fn receive_abi<T: Copy>(&self) -> T {
+		let data = self.ecx as *mut T;
+		unsafe { *data }.clone()
+	}
+
+	// Configures SysCallData to read having a member of T
+	// OS side api
+	pub fn send_abi<T: Copy>(&mut self, mut val: &T) {
+		let ptr = self.edx as *mut T;
+		unsafe { *ptr = *val };
+	}
 }
