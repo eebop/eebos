@@ -9,6 +9,9 @@
 #![feature(rustc_attrs)]
 #![feature(ptr_as_ref_unchecked)]
 
+// Todo: add checks for all the writeln!s
+#![allow(unused_must_use)]
+
 // This symbol is required for an allocator to work with --emit obj in no_std
 // My understanding is that it "tells" the compiler that you know what you're doing
 #[rustc_std_internal_symbol]
@@ -30,7 +33,9 @@ use elf::symbol;
 use elf::{self, endian::AnyEndian, segment::ProgramHeader, ElfBytes};
 
 mod syscall;
-use syscall_std::screen::Screen;
+mod process;
+use shared::screen::Screen;
+
 
 #[panic_handler]
 fn panic<'a, 'b>(info: &'a PanicInfo<'b>) -> ! {
@@ -40,9 +45,9 @@ fn panic<'a, 'b>(info: &'a PanicInfo<'b>) -> ! {
 }
 
 unsafe extern "C" {
-    static _binary_test_mod_start: u8;
-    static _binary_test_mod_size: u8;
-    static _binary_test_mod_end: u8;
+    static _binary_pic_start: u8;
+    static _binary_pic_size: u8;
+    static _binary_pic_end: u8;
 
     fn call64(ptr: u32);
 
@@ -161,9 +166,9 @@ fn debug_section(s: &mut Screen, name: &str, file: &ElfBytes<AnyEndian>) {
 
     writeln!(s, "here\n");
 
-    // if let Some(c) = com {
-    //     panic!("Compression isn't implemented!");
-    // }
+    let None = com else {
+        panic!("Compression isn't implemented!")
+    };
 
     writeln!(s, "data for section '{}': {:#010x?}", name, reinterpret_slice::<u8, u32>(data).unwrap());
 
@@ -176,7 +181,7 @@ fn as_fn_ptr<T>(ptr: usize) -> fn() -> T {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rustmain(mem: *mut u8) -> ! {
+pub extern "C" fn rustmain(mem: *mut u8) {
     // Due to C not calling our initializers, this code must be preformed as soon as we get control
     unsafe {
         DATAPTR = mem;
@@ -192,13 +197,13 @@ pub extern "C" fn rustmain(mem: *mut u8) -> ! {
     syscall::STATE.inner.set(Some(global_state));
     
     let code = unsafe {
-        core::slice::from_raw_parts(&_binary_test_mod_start as *const u8, &_binary_test_mod_size as *const u8 as usize)
+        core::slice::from_raw_parts(&_binary_pic_start as *const u8, &_binary_pic_size as *const u8 as usize)
     };
     
     writeln!(&mut s, "{:x?}", &code[0..5]);
     
     load_elf(s, code);
-    loop {}
+    // loop {}
 }
 
 fn load_elf(mut s: Screen, code: &[u8]) {
@@ -241,23 +246,21 @@ fn load_elf(mut s: Screen, code: &[u8]) {
 
                 let data = aligned_slice::<u8>(&mut s, offset + size_mptr, a.p_align as usize);
                 
-                writeln!(&mut s, "ptr: {:x}", unsafe {data.as_ptr() as usize});
+                writeln!(&mut s, "ptr: {:x}", data.as_ptr() as usize);
 
                 let data = &mut data[offset..];
 
-                writeln!(&mut s, "ptr: {:x  }", unsafe {data.as_ptr() as usize});
+                writeln!(&mut s, "ptr: {:x}", data.as_ptr() as usize);
 
                 data[..size_fptr].copy_from_slice(slice);
 
                 
-                relocations.push(RelocInfo { cmd: a, start: unsafe {data.as_ptr() as usize}, length: data.len()});
+                relocations.push(RelocInfo { cmd: a, start: data.as_ptr() as usize, length: data.len()});
                 slices.push(data);
             },
             elf::abi::PT_DYNAMIC => {
                 let dynam = file.dynamic().unwrap().unwrap();
             
-                let mut tags = Vec::<i64>::new();
-
                 for symbol in dynam {
                     match symbol.d_tag {
                         elf::abi::DT_FLAGS => {

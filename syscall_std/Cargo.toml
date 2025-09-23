@@ -1,4 +1,0 @@
-[package]
-name = "syscall_std"
-version = "0.1.0"
-edition = "2024"

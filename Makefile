@@ -11,7 +11,7 @@ QEMUFLAGS = -no-reboot -no-shutdown #-d cpu_reset,int
 # all filenames to build, minus extension
 srcs = boot kernel stdutils gdt pic ports irq page64 core64 sse
 
-modules = test_mod
+modules = test_mod pic
 
 builddir = build
 
@@ -83,8 +83,8 @@ $(builddir)/core64.o: core64/src/*.rs
 
 $(builddir)/mods/%.o: modules/%/src/main.rs modules/%/src/*.rs
 	mkdir -p build/mods
-	cd modules/$* ; cargo rustc --release --target=i686-unknown-linux-gnu -- -Ctarget-feature=+crt-static -Crelocation-model=pie -lc
-	cp modules/$*/target/release/$* $*
+	cd modules/$* ; cargo rustc --release --target=i686-unknown-linux-gnu -- -Ctarget-feature=+crt-static -Crelocation-model=pie
+	cp modules/$*/target/i686-unknown-linux-gnu/release/$* $*
 	i686-elf-objcopy -I binary -O elf32-i386 $* $@
 	mv $* $(builddir)/mods/$*
 
@@ -96,6 +96,7 @@ include makefile.deps
 clean:
 	-rm -rf build
 	-rm makefile.deps
-	for i in $(RSRC:%/Cargo.toml=%); do \
-		cd $$i; cargo clean -p $$i; cd ..; \
+	for i in $(RSRC:%/Cargo.toml=%) modules/*; do \
+		pwd=$$(pwd); \
+		cd $$i; cargo clean -p $$( basename $$i ) ; cd $$pwd; \
 	done;

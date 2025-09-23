@@ -1,0 +1,13 @@
+[package]
+name = "pic"
+version = "0.1.0"
+edition = "2024"
+
+[profile.release]
+panic = "abort"
+
+[profile.dev]
+panic = "abort"
+
+[dependencies]
+shared = { version = "0.1.0", path = "../../shared" }

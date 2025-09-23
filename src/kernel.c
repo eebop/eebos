@@ -225,15 +225,15 @@ void kernel_main(void)
     //     : "rax"
     // );
 
-	printf("here in 32-bit mode\n");
-
 	int x = 10;
 	int o = 5;
+
+	rustmain(malloc(0));
 
 	asm("push %[x]\n"
 		"mov $3, %%ebx\n"
 		"xchgw %%bx, %%bx\n"
-		"int $0x8f\n"
+		"int $0xff\n"
 		"mov %%ebx, %[o]\n"
 		"pop %[x]\n"
 		: [x] "+r" (x),

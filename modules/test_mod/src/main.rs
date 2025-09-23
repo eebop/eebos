@@ -1,22 +1,8 @@
-
 #![no_std]
 #![no_main]
 
-use alloc::{GlobalAlloc, Layout};
 
-pub struct Allocator;
-
-unsafe impl GlobalAlloc for Allocator {
-    unsafe fn alloc(&self, _layout: Layout) -> *mut u8 {
-        0 as *mut u8
-    }
-    unsafe fn dealloc(&self, _ptr: *mut u8, _layout: Layout) {
-        unreachable!();     // since we never allocate
-    }
-}
-
-#[global_allocator]
-static GLOBAL_ALLOCATOR: Allocator = Allocator;
+use shared::screen::Screen;
 
 use core::panic::PanicInfo;
 
@@ -34,70 +20,13 @@ pub extern "C" fn __libc_start_main() {
     main();
 }
 
-struct Screen {
-    line: usize,
-    row: usize
-}
-
-impl Screen {
-    pub fn coord(&self) -> usize {
-        return self.line * 80 + self.row;
-    }
-
-    pub fn write_byte(&mut self, c: u8) {
-        let screen: &mut [u16] = unsafe {
-            slice::from_raw_parts_mut(0xB8000 as *mut u16, 25 * 80)
-        };
-
-        if c == b'\n' {
-            while self.row != 80 {
-                screen[self.coord()] = (screen[self.coord()] & 0xFF00) | (b' ' as u16);
-                self.row += 1;
-            }
-            self.row = 0;
-            self.line += 1;
-            if self.line == 25 {
-                self.line = 0;
-            }
-            return;
-        }
-
-        screen[self.coord()] = (screen[self.coord()] & 0xFF00) | (c as u16);
-
-        self.row += 1;
-        if self.row == 80 {
-            self.row = 0;
-            self.line += 1;
-            if self.line == 25 {
-                self.line = 0;
-            }
-        }
-    }
-
-    pub fn clear_screen(&mut self) {
-        for _ in 0..(25 * 80) {
-            self.write_byte(b' ');
-        }
-    }
-
-}
-
-impl fmt::Write for Screen {
-    fn write_str(&mut self, s: &str) -> core::fmt::Result {
-        for byte in s.as_bytes() {
-            self.write_byte(*byte);
-        }
-        Ok(())
-    }
-}
-
 #[unsafe(no_mangle)]
 pub extern "C" fn main() -> u32 {
     let mut s = Screen { line: 0, row: 0};
     // s.clear_screen();
     writeln!(&mut s, "====Here!====");
 
-    syscall_std::make_syscall::<u32, (), 0xff>(0x1f1f);
+    shared::make_syscall::<u32, u32, 0xff>(0x1f1f);
 
     return 0;
 }
