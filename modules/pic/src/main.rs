@@ -11,7 +11,7 @@ use core::*;
 use core::fmt::Write;
 
 use shared::ports::{io_wait, in8, out8};
-use shared::{make_syscall, NewSysCall, State, SysCallData};
+use shared::{make_syscall, NewSysCall, State, SysCallInternal};
 
 #[derive(Clone, Copy)]
 enum PicPort {
@@ -61,7 +61,7 @@ fn enable(line: u8) {
     out8(port as u16, curr);
 }
 
-pub fn clock(cmd: &mut SysCallData, state: &mut State) {
+pub fn clock(cmd: &mut SysCallInternal, state: &mut State) {
 	writeln!(state.screen, "Clock!");
 	sendEOI(0);
 }

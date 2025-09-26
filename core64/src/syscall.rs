@@ -1,66 +1,62 @@
 use shared::screen::Screen;
 
 use core::fmt::Write;
-use core::*;
-use core::cell::Cell;
+use alloc::vec::Vec;
+use core::cell::{RefCell, RefMut};
 
-use shared::SysCallData;
+use shared::SysCallInternal;
 use shared::State;
+use shared::*;
 
-pub struct MonoThreadedCell<T> {
-	pub inner: Cell<T>
+pub static STATE: State = State::new();
+
+unsafe extern "C" {
+    static mut stored_sp: u32;
+    static mut stack_top: u8;
 }
 
-// Only safe in single-threaded code, like this
-unsafe impl<T> Sync for MonoThreadedCell<T> {}
+// pub fn submit_syscall_syscall(cmd: &mut SysCallInternal, state: &mut State) {
+// 	let data = cmd.receive_abi::<shared::NewSysCall>();
+// 	state.interrupts[data.channel as usize] = Some(data.ptr);
 
-pub static STATE: MonoThreadedCell<Option<State>> = MonoThreadedCell { inner: Cell::new(Some(
-	State {
-		screen: Screen {line: 0, row: 0},
-		interrupts: [None; 256]
+
+// 	cmd.send_abi(&());
+// }
+
+// pub fn debug_print_syscall(cmd: &mut SysCallInternal, state: &mut State) {
+// 	let data = cmd.receive_abi::<u32>();
+// 	writeln!(state.screen, "got the following: {:x}", data);
+// 	cmd.send_abi(&());
+// }
+
+fn next_task(curr: &mut SysCallInternal, state: &State) {
+	*curr = match state.saves.borrow_mut().pop() {
+		Some(s) => s,
+		None => {loop {}}, // The OS has nothing to do. Spinloop until an interrupt
 	}
-))};
-
-
-pub fn submit_syscall_syscall(cmd: &mut SysCallData, state: &mut State) {
-	let data = cmd.receive_abi::<shared::NewSysCall>();
-	state.interrupts[data.channel as usize] = Some(data.ptr);
-
-
-	cmd.send_abi(&());
 }
-
-pub fn debug_print_syscall(cmd: &mut SysCallData, state: &mut State) {
-	let data = cmd.receive_abi::<u32>();
-	writeln!(state.screen, "got the following: {:x}", data);
-	cmd.send_abi(&());
-}
-
 
 #[unsafe(no_mangle)]
-extern "C" fn isr_handler(regs: *mut SysCallData) {
+extern "C" fn isr_handler(regs: *mut SysCallInternal) {
+	// WARNING
+    let regs = SysCallData::new(unsafe { regs.as_mut_unchecked() });
 
-	// Safe because we safely created the ref in assembly
-    let regs = unsafe { regs.as_mut_unchecked() };
-
-	let mut state = match STATE.inner.take() {
-		Some(state) => state,
-		None => {
-			panic!("recursive fail");
+	match STATE.interrupts.borrow()[regs.interrupt as usize].clone() {
+		Syscall::Request(f) => {
+			f(regs, &STATE);
 			return;
-		} // Just silently ignore
-						 // Hopefully just the system clock
-	};
-
-
-	// writeln!(&mut state.screen, "data is: {}", regs.interrupt);
-	// writeln!(&mut state.screen, "data: {:#x?}", regs);
-	// writeln!(&mut state.screen, "interrupts are: {:#x?}", state.interrupts[regs.interrupt as usize]);
-
-
-	if let Some(syscall) = state.interrupts[regs.interrupt as usize] {
-		syscall(regs, &mut state);
+		},
+		Syscall::Dispatch(f) => {
+			// We are diverging, so the next interrupt should restart the stack
+			unsafe {
+				stored_sp = (&raw mut stack_top) as u32;
+			}
+			STATE.saves.borrow_mut().push(*regs);
+			todo!();
+		},
+		Syscall::Empty => {
+			panic!("Interrupt occurred but no corresponding interrupt handler\nError: {:#?}", *regs);
+		}
 	}
 
-	STATE.inner.set(Some(state));
 }

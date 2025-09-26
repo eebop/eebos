@@ -66,10 +66,6 @@ struct RelocInfo {
     length: usize
 }
 
-struct LoadSettings {
-    
-}
-
 struct SimpleAllocator;
 
 unsafe impl GlobalAlloc for SimpleAllocator {
@@ -117,30 +113,30 @@ fn reinterpret_slice_mut<T, U>(i: &mut [T]) -> Option<&mut [U]> {
     }
 }
 
-fn aligned_slice<T: Copy + Default>(s: &mut Screen, size: usize, align: usize) -> &'static mut [T] {
-    assert!(align.is_power_of_two());
-    let layout = Layout::from_size_align(size * size_of::<T>(), cmp::max(align, align_of::<T>())).unwrap();
-    let out = unsafe {        
+// fn aligned_slice<T: Copy + Default>(s: &mut Screen, size: usize, align: usize) -> &'static mut [T] {
+//     assert!(align.is_power_of_two());
+//     let layout = Layout::from_size_align(size * size_of::<T>(), cmp::max(align, align_of::<T>())).unwrap();
+//     let out = unsafe {        
         
-        // unsafe {
-        //     DATAPTR = DATAPTR.add(add_on)
-        // }
+//         // unsafe {
+//         //     DATAPTR = DATAPTR.add(add_on)
+//         // }
 
-        // writeln!(s, "DATA is currently: {:x}", unsafe {DATAPTR as usize});
-
-
-        let aligned_ptr = alloc::alloc::alloc(layout) as *mut T;
+//         // writeln!(s, "DATA is currently: {:x}", unsafe {DATAPTR as usize});
 
 
-        // writeln!(s, "Alloc; ptr is {:x}, DATA is {:x}", aligned_ptr as usize, unsafe { DATAPTR as usize});
-        slice::from_raw_parts_mut(aligned_ptr, size)
-    };
+//         let aligned_ptr = alloc::alloc::alloc(layout) as *mut T;
 
-    for elem in out.iter_mut() {
-        *elem = T::default();
-    }
-    out
-}
+
+//         // writeln!(s, "Alloc; ptr is {:x}, DATA is {:x}", aligned_ptr as usize, unsafe { DATAPTR as usize});
+//         slice::from_raw_parts_mut(aligned_ptr, size)
+//     };
+
+//     for elem in out.iter_mut() {
+//         *elem = T::default();
+//     }
+//     out
+// }
 
 fn relocate_symbol(symbol: u64, relocations: &Vec<RelocInfo>) -> (usize, u64) {
     for reloc in relocations.iter().enumerate() {
@@ -191,10 +187,10 @@ pub extern "C" fn rustmain(mem: *mut u8) {
 
     s.clear_screen();
 
-    let mut global_state = syscall::STATE.inner.take().unwrap();
-    global_state.interrupts[0x30] = Some(syscall::submit_syscall_syscall);
-    global_state.interrupts[0xff] = Some(syscall::debug_print_syscall);
-    syscall::STATE.inner.set(Some(global_state));
+    // let mut global_state = syscall::STATE.inner.take().unwrap();
+    // global_state.interrupts[0x30] = Some(syscall::submit_syscall_syscall);
+    // global_state.interrupts[0xff] = Some(syscall::debug_print_syscall);
+    // syscall::STATE.inner.set(Some(global_state));
     
     let code = unsafe {
         core::slice::from_raw_parts(&_binary_pic_start as *const u8, &_binary_pic_size as *const u8 as usize)
@@ -206,14 +202,13 @@ pub extern "C" fn rustmain(mem: *mut u8) {
     // loop {}
 }
 
-fn load_elf(mut s: Screen, code: &[u8]) {
+fn load_elf(mut s: Screen, code: &[u8]) -> Process {
     let file = ElfBytes::<AnyEndian>::minimal_parse(code).expect("Can't parse!");
 
     let x = file.segments().expect("Can't get segments!");
 
     let got = file.section_header_by_name(".got").expect(".got currently required as is necessary for PIE").expect(".got currently required as is necessary for PIE");
 
-    let mut relocations: Vec<RelocInfo> = Vec::new();
     let mut slices: Vec<&'static mut [u8]> = Vec::new();
 
     let mut init_fns: Vec<u64> = Vec::<u64>::new();

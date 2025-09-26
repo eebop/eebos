@@ -1,1 +1,0 @@
-/home/eebop/ostest/modules/pic/target/i686-unknown-linux-gnu/release/pic: /home/eebop/ostest/modules/pic/src/main.rs /home/eebop/ostest/shared/src/lib.rs /home/eebop/ostest/shared/src/ports.rs /home/eebop/ostest/shared/src/screen.rs
