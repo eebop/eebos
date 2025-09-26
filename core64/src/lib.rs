@@ -209,13 +209,13 @@ fn load_elf(mut s: Screen, code: &[u8]) -> Process {
 
     let got = file.section_header_by_name(".got").expect(".got currently required as is necessary for PIE").expect(".got currently required as is necessary for PIE");
 
-    let mut slices: Vec<&'static mut [u8]> = Vec::new();
+    let mut loads: Vec<ProgramHeader> = Vec::new();
 
-    let mut init_fns: Vec<u64> = Vec::<u64>::new();
+    let mut init_fns: Vec<u32> = Vec::new();
     let mut init_ptr: Option<usize> = None; // these really should be u64 but we are in 32 bit mode so there's not even a way to load a module > 2^31 bits
     let mut init_size: Option<usize> = None;
 
-    let mut fini_fns = Vec::<u64>::new();
+    let mut fini_fns: Vec<u32> = Vec::new();
     let mut fini_ptr: Option<usize> = None;
     let mut fini_size: Option<usize> = None;
 
@@ -226,32 +226,33 @@ fn load_elf(mut s: Screen, code: &[u8]) -> Process {
                 // elf table-size record-keeping; ignore
             },
             elf::abi::PT_LOAD => {
-                // Allocate a.p_memsz bytes into data. data & !(a.p_align - 1) must equal a.p_vaddr & !(a.p_align - 1)
-                // Then, copy code[a.p_offset..a.p_offset + a.p_filesz] into data
-                let start_fptr = a.p_offset as usize;
+                // // Allocate a.p_memsz bytes into data. data & !(a.p_align - 1) must equal a.p_vaddr & !(a.p_align - 1)
+                // // Then, copy code[a.p_offset..a.p_offset + a.p_filesz] into data
+                // let start_fptr = a.p_offset as usize;
 
-                let size_fptr = a.p_filesz as usize;
-                let size_mptr = a.p_memsz as usize;
+                // let size_fptr = a.p_filesz as usize;
+                // let size_mptr = a.p_memsz as usize;
 
-                let slice = &code[start_fptr..start_fptr + size_fptr];
+                // let slice = &code[start_fptr..start_fptr + size_fptr];
 
-                let offset = a.p_vaddr as usize & (a.p_align as usize - 1); // aligned will give us a block starting at 2^n, so we need to offset our data
+                // let offset = a.p_vaddr as usize & (a.p_align as usize - 1); // aligned will give us a block starting at 2^n, so we need to offset our data
 
-                writeln!(&mut s, "offset is {:x}", offset);
+                // writeln!(&mut s, "offset is {:x}", offset);
 
-                let data = aligned_slice::<u8>(&mut s, offset + size_mptr, a.p_align as usize);
+                // let data = aligned_slice::<u8>(&mut s, offset + size_mptr, a.p_align as usize);
                 
-                writeln!(&mut s, "ptr: {:x}", data.as_ptr() as usize);
+                // writeln!(&mut s, "ptr: {:x}", data.as_ptr() as usize);
 
-                let data = &mut data[offset..];
+                // let data = &mut data[offset..];
 
-                writeln!(&mut s, "ptr: {:x}", data.as_ptr() as usize);
+                // writeln!(&mut s, "ptr: {:x}", data.as_ptr() as usize);
 
-                data[..size_fptr].copy_from_slice(slice);
+                // data[..size_fptr].copy_from_slice(slice);
 
                 
-                relocations.push(RelocInfo { cmd: a, start: data.as_ptr() as usize, length: data.len()});
-                slices.push(data);
+                // relocations.push(RelocInfo { cmd: a, start: data.as_ptr() as usize, length: data.len()});
+                // slices.push(data);
+                loads.push(a);
             },
             elf::abi::PT_DYNAMIC => {
                 let dynam = file.dynamic().unwrap().unwrap();
@@ -301,10 +302,10 @@ fn load_elf(mut s: Screen, code: &[u8]) -> Process {
                             fini_size = Some(symbol.d_val() as usize);
                         },
                         elf::abi::DT_INIT => {
-                            init_fns.push(symbol.d_ptr());
+                            init_fns.push(symbol.d_ptr() as u32);
                         },
                         elf::abi::DT_FINI => {
-                            fini_fns.push(symbol.d_ptr());
+                            fini_fns.push(symbol.d_ptr() as u32);
                         },
                         elf::abi::DT_GNU_HASH => {
 
@@ -343,6 +344,37 @@ fn load_elf(mut s: Screen, code: &[u8]) -> Process {
             
         }
     }
+
+    assert_ne!(loads.len(), 0);
+
+    let mut earliest: Option<u32> = None;
+    let mut latest: Option<u32> = None;
+
+    for header in loads {
+        match earliest {
+            Some(e) => {
+                earliest = Some(cmp::min(e, header.p_vaddr as u32))
+            },
+            None => {
+                earliest = Some(header.p_vaddr as u32)
+            }
+        }
+        match latest {
+            Some(l) => {
+                latest = Some(cmp::max(l, header.p_vaddr as u32 + header.p_memsz as u32))
+            },
+            None => {
+                latest = Some(header.p_vaddr as u32 + header.p_memsz as u32)
+            }
+        }
+    }
+
+    let earliest = earliest.unwrap();
+    let latest = latest.unwrap();
+
+    let num_pages = u32::div_ceil(latest - earliest, 0x1000);
+
+
 
     if let (Some(rinit_ptr), Some(rinit_size)) = (init_ptr, init_size) {
         writeln!(&mut s, "rinits: {:x}, {:x}, {:x}", rinit_ptr, rinit_size, code.len());

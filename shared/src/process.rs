@@ -30,7 +30,6 @@ impl Page {
 
 pub struct Process {
     pub got_ptr: u32,
-    
     pub owned_data: Vec<Box<[Page]>>,
     pub stacks: Vec<Box<[Page]>>, // Unitialized
 }
