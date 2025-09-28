@@ -1,6 +1,6 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
-use core::ops::{Deref, DerefMut};
+use core::ops::{Deref, DerefMut, Index, IndexMut};
 use core::arch::asm;
 
 #[repr(C, align(0x1000))]
@@ -20,26 +20,43 @@ impl DerefMut for Page {
 }
 
 impl Page {
-	fn uninit_box() -> Box<Self> {
+	pub fn uninit_box() -> Box<Self> {
 		unsafe { Box::new_uninit().assume_init() }
 	}
-    fn uninit_many(size: usize) -> Box<[Self]> {
+    pub fn uninit_many(size: usize) -> Box<[Self]> {
         unsafe { Box::new_uninit_slice(size).assume_init() }
     }
 }
 
+pub trait CoherentMultidemsionality<'a> {
+    fn as_contiguous(self) -> &'a mut [u8];
+}
+
+impl<'a> CoherentMultidemsionality<'a> for &'a mut [Page] {
+    fn as_contiguous(self) -> &'a mut [u8] {
+        if let 0 = self.len() {
+            &mut []
+        } else {
+            unsafe {
+                core::slice::from_raw_parts_mut(&raw mut self[0].0[0], 0x1000 * self.len())
+            }
+        }
+    }
+}
+
 pub struct Process {
-    pub got_ptr: u32,
+    pub got_ptr: *mut [u8],
+    pub _start: extern "C" fn() -> !,
     pub owned_data: Vec<Box<[Page]>>,
     pub stacks: Vec<Box<[Page]>>, // Unitialized
 }
 
 impl Process {
-    fn new_stack(&mut self) {
+    pub fn new_stack(&mut self) {
         self.stacks.push(Page::uninit_many(4));
     }
 
-    fn make_fncall(&mut self, _start: extern "C" fn()) -> ! {
+    pub fn make_fncall(&mut self, _start: extern "C" fn() -> !) -> ! {
         // TODO: Initialization is more complex if you have argv that isn't empty
         self.new_stack();
         let size = self.stacks.last().unwrap().len() * 0x1000;

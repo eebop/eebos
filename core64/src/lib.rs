@@ -24,18 +24,19 @@ fn __rust_alloc_error_handler(_: core::alloc::Layout) -> ! {
     panic!("memory allocation failed");
 }
 
+#[macro_use]
 extern crate alloc;
 
 use core::*;
 use core::{arch::asm, alloc::{GlobalAlloc, Layout}, fmt::{Write}, panic::PanicInfo};
-use alloc::vec::Vec;
+use alloc::vec::{self, Vec};
 use elf::symbol;
 use elf::{self, endian::AnyEndian, segment::ProgramHeader, ElfBytes};
 
 mod syscall;
-mod process;
+use shared::process::{Page, Process};
 use shared::screen::Screen;
-
+use shared::process::CoherentMultidemsionality;
 
 #[panic_handler]
 fn panic<'a, 'b>(info: &'a PanicInfo<'b>) -> ! {
@@ -219,40 +220,33 @@ fn load_elf(mut s: Screen, code: &[u8]) -> Process {
     let mut fini_ptr: Option<usize> = None;
     let mut fini_size: Option<usize> = None;
 
+    let mut earliest: Option<u32> = None;
+    let mut latest: Option<u32> = None;
 
-    for a in x {
-        match a.p_type {
+
+    for header in x {
+        match header.p_type {
             elf::abi::PT_PHDR => {
                 // elf table-size record-keeping; ignore
             },
             elf::abi::PT_LOAD => {
-                // // Allocate a.p_memsz bytes into data. data & !(a.p_align - 1) must equal a.p_vaddr & !(a.p_align - 1)
-                // // Then, copy code[a.p_offset..a.p_offset + a.p_filesz] into data
-                // let start_fptr = a.p_offset as usize;
-
-                // let size_fptr = a.p_filesz as usize;
-                // let size_mptr = a.p_memsz as usize;
-
-                // let slice = &code[start_fptr..start_fptr + size_fptr];
-
-                // let offset = a.p_vaddr as usize & (a.p_align as usize - 1); // aligned will give us a block starting at 2^n, so we need to offset our data
-
-                // writeln!(&mut s, "offset is {:x}", offset);
-
-                // let data = aligned_slice::<u8>(&mut s, offset + size_mptr, a.p_align as usize);
-                
-                // writeln!(&mut s, "ptr: {:x}", data.as_ptr() as usize);
-
-                // let data = &mut data[offset..];
-
-                // writeln!(&mut s, "ptr: {:x}", data.as_ptr() as usize);
-
-                // data[..size_fptr].copy_from_slice(slice);
-
-                
-                // relocations.push(RelocInfo { cmd: a, start: data.as_ptr() as usize, length: data.len()});
-                // slices.push(data);
-                loads.push(a);
+                match earliest {
+                    Some(e) => {
+                        earliest = Some(cmp::min(e, header.p_vaddr as u32))
+                    },
+                    None => {
+                        earliest = Some(header.p_vaddr as u32)
+                    }
+                }
+                match latest {
+                    Some(l) => {
+                        latest = Some(cmp::max(l, header.p_vaddr as u32 + header.p_memsz as u32))
+                    },
+                    None => {
+                        latest = Some(header.p_vaddr as u32 + header.p_memsz as u32)
+                    }
+                }
+                loads.push(header);
             },
             elf::abi::PT_DYNAMIC => {
                 let dynam = file.dynamic().unwrap().unwrap();
@@ -347,45 +341,30 @@ fn load_elf(mut s: Screen, code: &[u8]) -> Process {
 
     assert_ne!(loads.len(), 0);
 
-    let mut earliest: Option<u32> = None;
-    let mut latest: Option<u32> = None;
+    let earliest = earliest.unwrap() as usize;
+    let latest = latest.unwrap() as usize;
+
+    let num_pages = usize::div_ceil(latest - earliest, 0x1000);
+
+    let mut owned_data = Page::uninit_many(num_pages as usize);
+
+    let new_earliest = owned_data.as_ptr() as usize; 
+
+    let array = owned_data.as_contiguous();
 
     for header in loads {
-        match earliest {
-            Some(e) => {
-                earliest = Some(cmp::min(e, header.p_vaddr as u32))
-            },
-            None => {
-                earliest = Some(header.p_vaddr as u32)
-            }
-        }
-        match latest {
-            Some(l) => {
-                latest = Some(cmp::max(l, header.p_vaddr as u32 + header.p_memsz as u32))
-            },
-            None => {
-                latest = Some(header.p_vaddr as u32 + header.p_memsz as u32)
-            }
-        }
+        let start = header.p_vaddr as usize - earliest as usize;
+        array[start..][..header.p_filesz as usize].copy_from_slice(&code[header.p_offset as usize..][..(header.p_offset + header.p_filesz) as usize]);
+        array[start..][header.p_filesz as usize ..header.p_memsz as usize].fill(0);
     }
 
-    let earliest = earliest.unwrap();
-    let latest = latest.unwrap();
-
-    let num_pages = u32::div_ceil(latest - earliest, 0x1000);
-
-
-
     if let (Some(rinit_ptr), Some(rinit_size)) = (init_ptr, init_size) {
-        writeln!(&mut s, "rinits: {:x}, {:x}, {:x}", rinit_ptr, rinit_size, code.len());
+        let subslice = &array[rinit_ptr - earliest..][..rinit_size];
 
-        let (table, index) = relocate_symbol(rinit_ptr as u64, &relocations);
-
-        let buf = &mut slices[table][index as usize..(index as usize + rinit_size)];
-
-        let ptrbuf = reinterpret_slice::<u8, u64>(buf).expect("Malformed INIT_ARRAY directive");
+        let ptrbuf = reinterpret_slice::<u8, u32>(subslice).expect("Malformed INIT_ARRAY directive");
 
         init_fns.extend_from_slice(ptrbuf);
+
     } else {
         let (None, None) = (init_ptr, init_size) else {
             // Todo: possiblity that arrays may be null-terminated without SZ element
@@ -393,91 +372,46 @@ fn load_elf(mut s: Screen, code: &[u8]) -> Process {
         };
     }
     if let (Some(rfini_ptr), Some(rfini_size)) = (fini_ptr, fini_size) {
-        writeln!(&mut s, "rfini_ptr: {:x}", rfini_ptr);
-        let (table, index) = relocate_symbol(rfini_ptr as u64, &mut relocations);
+        let subslice = &array[rfini_ptr - earliest..][..rfini_size];
 
-        let buf = &mut slices[table][index as usize..(index as usize + rfini_size)];
-
-        let ptrbuf = reinterpret_slice::<u8, u64>(buf).expect("Malformed INIT_ARRAY directive");
+        let ptrbuf = reinterpret_slice::<u8, u32>(subslice).expect("Malformed INIT_ARRAY directive");
 
         fini_fns.extend_from_slice(ptrbuf);
+
     } else {
         let (None, None) = (fini_ptr, fini_size) else {
             // Todo: possiblity that arrays may be null-terminated without SZ element
             panic!("Error FINI_ARRAY but not FINI_ARRAYSZ or visa versa");
         };
     }
-    // writeln!(&mut s, "inits: {:x?}\nfinis: {:x?}", init_fns, fini_fns);
 
+    let got_data = &mut array[got.sh_addr as usize - earliest..][..got.sh_size as usize];
 
-    // debug_section(&mut s, ".got", &file);
-    // debug_section(&mut s, ".got.plt", &file);
-
-    
-    // unsafe { call64(0); }
-
-    let (table, index) = relocate_symbol(got.sh_addr, &relocations);
-
-    let index: usize = index.try_into().unwrap();
-
-    let data = &mut slices[table][index..index+(got.sh_size as usize)];
-
-
-    let data = reinterpret_slice_mut::<u8, u32>(data).expect(".got must contain 32 bit dwords");
-
-    writeln!(&mut s, "here3!");
-
+    let got_data = reinterpret_slice_mut::<u8, u32>(got_data).expect(".got must contain 32 bit dwords");
 
     match file.section_header_by_name(".dynamic").unwrap() {
         Some(dyn_header) => {
             // First element must point to dynamic header, if it exists
-            let (t, i) = relocate_symbol(dyn_header.sh_addr, &relocations);
-            data[0] = relocations[t].start as u32 + i as u32;
+            got_data[0] = dyn_header.sh_addr as u32 - earliest as u32 + new_earliest as u32;
         },
         None => {}
     }
 
-    writeln!(&mut s, "data is: {:x?}, {:p}", data, data);
-
-    for elem in data[3..].iter_mut() {
-        // if *elem != 0 {
-        let old = *elem;
-        *elem = relocate_as_ptr(*elem as usize, &relocations) as u32;
-        // let val =  unsafe { str::from_utf8_unchecked(slice::from_raw_parts((* elem) as *const u8, 8)) };
-        writeln!(&mut s, "relocating {:x?} to {:x?}", old, *elem);
-        // }
+    for elem in got_data[3..].iter_mut() {
+        *elem = *elem as u32 - earliest as u32 + new_earliest as u32;
     }
 
-    // for mut ptr in init_fns {
-    //     if ptr != 0 {
-    //         ptr = relocate_as_ptr(ptr as usize, &relocations) as u64;
-    //         let fn_ptr = as_fn_ptr::<()>(ptr as usize);
-    //         fn_ptr();
-    //     }
-    // }
+    assert!(init_fns.len() == 0);
+    assert!(fini_fns.len() == 0);
 
+    let _start: extern "C" fn() -> ! = unsafe { core::mem::transmute(file.ehdr.e_entry as u32 - earliest as u32 + new_earliest as u32) };
 
-    let mut relocs_dbg = Vec::<(usize, usize, usize)>::new();
+    let got_ptr = &raw mut *got_data;
 
-    for reloc in &relocations {
-        relocs_dbg.push((reloc.cmd.p_vaddr as usize, reloc.start, reloc.length));   
-    }
-
-    writeln!(&mut s, "INFO: {:x?}", relocs_dbg);
-
-    let ptr = as_fn_ptr::<u32>(relocate_as_ptr(file.ehdr.e_entry as usize, &relocations));
-
-    unsafe { asm!("xchg bx, bx") };
-
-    let out = ptr();
-
-    writeln!(&mut s, "Got out: {out}");
-
-    for mut ptr in fini_fns {
-        if ptr != 0 {
-            ptr = relocate_as_ptr(ptr as usize, &relocations) as u64;
-            let fn_ptr = as_fn_ptr::<()>(ptr as usize);
-            fn_ptr();
-        }
+    Process {
+        got_ptr: got_ptr as *mut [u8],
+        owned_data: vec![owned_data],
+        stacks: vec![],
+        _start: _start
     }
 }

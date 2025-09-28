@@ -11,18 +11,23 @@ pub mod ports;
 pub mod process;
 use screen::Screen;
 use core::cell::{RefCell, RefMut};
-use alloc::{boxed::Box, vec::Vec};
+use alloc::{boxed::Box, collections::btree_map::BTreeMap, vec::Vec};
 use core::ops::{Deref, DerefMut};
+
+use crate::process::Process;
 
 // Makes a syscall and then interprets the return value
 // User side api
 pub fn make_syscall<T: Copy, U: Copy, const CHANNEL: u8>(mut data: T) -> U {
 	let mut out: MaybeUninit<U> = MaybeUninit::uninit();
+	let mut buff: MaybeUninit<[u32; 4]> = MaybeUninit::uninit();
 	unsafe { asm! (
-		"mov eax, esp",
+		"xchg eax, esp",
 		"int {0}",
 		"mov esp, eax",
 		const CHANNEL,
+		in("eax") (&raw mut buff).wrapping_add(4), // point to top bc stack grows downwards
+		lateout("eax") _,
 		in("ecx") &raw mut data,
 		in("edx") &raw mut out,
 	) };
@@ -31,9 +36,9 @@ pub fn make_syscall<T: Copy, U: Copy, const CHANNEL: u8>(mut data: T) -> U {
 }
 
 #[derive(Copy, Clone)]
-pub struct NewSysCall {
-	pub channel: u8,
-	pub ptr: fn(&mut SysCallInternal, &mut State)
+pub enum NewSysCall {
+	Request (u8, fn(&mut SysCallInternal, &mut State)),
+
 }
 
 #[repr(C)]
@@ -97,8 +102,8 @@ impl<'a> SysCallData<'a> {
 pub enum Syscall {
 	// A request claims a mutable lock on the OS state
 	// Used to modify core state
-	Request(fn(SysCallData, &State)),
-	Dispatch(extern "C" fn() -> !),
+	Request(fn(SysCallData, &State), usize),
+	Dispatch(extern "C" fn() -> !, usize),
 	#[default]
 	Empty
 }
@@ -106,7 +111,9 @@ pub enum Syscall {
 pub struct State {
 	pub screen: RefCell<Screen>,
 	pub interrupts: RefCell<[Syscall; 256]>,
-	pub saves: RefCell<Vec<SysCallInternal>>
+	pub saves: RefCell<Vec<(SysCallInternal, usize)>>,
+	pub processes: RefCell<Vec<Process>>,
+	pub currentProcess: RefCell<Option<usize>>
 }
 
 // Safe as there will only be one processor
@@ -117,7 +124,9 @@ impl State {
 		Self {
 			screen: RefCell::new(Screen {line: 0, row: 0}),
 			interrupts: RefCell::new([Syscall::Empty; 256]),
-			saves: RefCell::new(Vec::new())
+			saves: RefCell::new(Vec::new()),
+			processes: RefCell::new(Vec::new()),
+			currentProcess: RefCell::new(None)
 		}
 	}
 }
