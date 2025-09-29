@@ -1,17 +1,16 @@
 #![no_std]
 #![no_main]
 
-
-use shared::screen::Screen;
-
 use core::panic::PanicInfo;
 
 use core::*;
 
 use core::fmt::Write;
 
+use core::alloc::GlobalAlloc;
+
 use shared::ports::{io_wait, in8, out8};
-use shared::{make_syscall, NewSysCall, State, SysCallInternal};
+use shared::{make_syscall, NewSysCall, State, SysCallData};
 
 #[derive(Clone, Copy)]
 enum PicPort {
@@ -24,7 +23,9 @@ enum PicPort {
 const PICEOI: u8 = 0x20;
 
 #[panic_handler]
-fn panic<'a, 'b>(_: &'a PanicInfo<'b>) -> ! {
+fn panic<'a, 'b>(p: &'a PanicInfo<'b>) -> ! {
+    let mut s = shared::screen::Screen {line: 0, row: 0};
+    writeln!(&mut s, "{}", p);
     loop {}
 }
 
@@ -33,10 +34,32 @@ pub extern "C" fn __libc_start_main() {
     main();
 }
 
+struct EmptyAllocator;
+
+unsafe impl GlobalAlloc for EmptyAllocator {
+    unsafe fn alloc(&self, layout: alloc::Layout) -> *mut u8 {
+        panic!("Alloc not supported here!");
+    }
+
+    unsafe fn dealloc(&self, ptr: *mut u8, layout: alloc::Layout) {
+        panic!("Alloc not supported here!");
+    }
+}
+
+#[global_allocator]
+static EMPTY_ALLOCATOR: EmptyAllocator = EmptyAllocator;
+
+
 #[unsafe(no_mangle)]
 pub extern "C" fn main() {
-    make_syscall::<NewSysCall, (), 0x30>(NewSysCall { channel: 0x20, ptr: clock });
+    let mut s = shared::screen::Screen {line: 0, row: 0};
+    writeln!(&mut s, "test_here");
+    let data = NewSysCall::Request(0x20, clock);
+    writeln!(&mut s, "test_here");
+    make_syscall::<NewSysCall, (), 0x30>(data);
+    writeln!(&mut s, "test_here");
     enable(0);
+    writeln!(&mut s, "test_here");
 }
 
 fn get_state() -> u16 {
@@ -61,8 +84,8 @@ fn enable(line: u8) {
     out8(port as u16, curr);
 }
 
-pub fn clock(cmd: &mut SysCallInternal, state: &mut State) {
-	writeln!(state.screen, "Clock!");
+pub fn clock(cmd: SysCallData, state: &State) {
+	writeln!(state.screen.borrow_mut(), "Clock!");
 	sendEOI(0);
 }
 

@@ -38,6 +38,8 @@ use shared::process::{Page, Process};
 use shared::screen::Screen;
 use shared::process::CoherentMultidemsionality;
 
+use crate::syscall::STATE;
+
 #[panic_handler]
 fn panic<'a, 'b>(info: &'a PanicInfo<'b>) -> ! {
     let mut s = Screen {line: 0, row: 0};
@@ -179,7 +181,7 @@ fn as_fn_ptr<T>(ptr: usize) -> fn() -> T {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn rustmain(mem: *mut u8) {
-    // Due to C not calling our initializers, this code must be preformed as soon as we get control
+    // This code must be preformed as soon as we get control
     unsafe {
         DATAPTR = mem;
     }
@@ -188,19 +190,32 @@ pub extern "C" fn rustmain(mem: *mut u8) {
 
     s.clear_screen();
 
-    // let mut global_state = syscall::STATE.inner.take().unwrap();
-    // global_state.interrupts[0x30] = Some(syscall::submit_syscall_syscall);
-    // global_state.interrupts[0xff] = Some(syscall::debug_print_syscall);
-    // syscall::STATE.inner.set(Some(global_state));
     
+
     let code = unsafe {
         core::slice::from_raw_parts(&_binary_pic_start as *const u8, &_binary_pic_size as *const u8 as usize)
     };
-    
-    writeln!(&mut s, "{:x?}", &code[0..5]);
-    
-    load_elf(s, code);
-    // loop {}
+    let pic = load_elf(s, code);
+        
+    STATE.processes.borrow_mut().push(pic);
+
+    STATE.currentProcess.replace(Some(0));
+
+
+    {
+        let mut ptr = STATE.interrupts.borrow_mut();
+        ptr[0x30] = shared::Syscall::Request(syscall::submit_syscall, 0);
+        drop(ptr);
+    };
+
+    // SAFETY: we will not aquire another borrow of processes
+    // We must do this because making a syscall doesn't drop anything
+    // Meaning if we did .borrow_mut() then after the syscall it'd be unusable
+    let p = unsafe { STATE.processes.as_ptr().as_mut_unchecked() };
+
+    let ptr = p[0]._start;
+
+    p[0].make_fncall(ptr);
 }
 
 fn load_elf(mut s: Screen, code: &[u8]) -> Process {
@@ -354,7 +369,7 @@ fn load_elf(mut s: Screen, code: &[u8]) -> Process {
 
     for header in loads {
         let start = header.p_vaddr as usize - earliest as usize;
-        array[start..][..header.p_filesz as usize].copy_from_slice(&code[header.p_offset as usize..][..(header.p_offset + header.p_filesz) as usize]);
+        array[start..][..header.p_filesz as usize].copy_from_slice(&code[header.p_offset as usize..][..header.p_filesz as usize]);
         array[start..][header.p_filesz as usize ..header.p_memsz as usize].fill(0);
     }
 

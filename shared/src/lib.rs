@@ -10,9 +10,10 @@ pub mod screen;
 pub mod ports;
 pub mod process;
 use screen::Screen;
-use core::cell::{RefCell, RefMut};
-use alloc::{boxed::Box, collections::btree_map::BTreeMap, vec::Vec};
+use core::cell::{RefCell};
+use alloc::{vec::Vec};
 use core::ops::{Deref, DerefMut};
+use core::fmt::Write;
 
 use crate::process::Process;
 
@@ -23,6 +24,7 @@ pub fn make_syscall<T: Copy, U: Copy, const CHANNEL: u8>(mut data: T) -> U {
 	let mut buff: MaybeUninit<[u32; 4]> = MaybeUninit::uninit();
 	unsafe { asm! (
 		"xchg eax, esp",
+		"xchg bx, bx",
 		"int {0}",
 		"mov esp, eax",
 		const CHANNEL,
@@ -37,7 +39,8 @@ pub fn make_syscall<T: Copy, U: Copy, const CHANNEL: u8>(mut data: T) -> U {
 
 #[derive(Copy, Clone)]
 pub enum NewSysCall {
-	Request (u8, fn(&mut SysCallInternal, &mut State)),
+	Request(u8, fn(SysCallData, &State)),
+	Dispatch(u8, extern "C" fn() -> !)
 
 }
 
@@ -98,7 +101,7 @@ impl<'a> SysCallData<'a> {
 	}
 }
 
-#[derive(Default, Clone, Copy)]
+#[derive(Default, Clone, Copy, Debug	)]
 pub enum Syscall {
 	// A request claims a mutable lock on the OS state
 	// Used to modify core state

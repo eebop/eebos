@@ -15,10 +15,10 @@ isr_%+%1: ; we just came in from a int
 
 stack_configured_%+%1:
     
-    push DWORD [eax - 0x10]
-    push DWORD [eax - 0xc ]
-    push DWORD [eax - 0x8 ]
-    push DWORD [eax - 0x4 ]
+    push DWORD [eax - 0xc]
+    push DWORD [eax - 0x8]
+    push DWORD [eax - 0x4]
+    push DWORD [eax - 0x0]
     
     sub eax, 0x10 ; eax is now old esp
     push eax
@@ -52,6 +52,7 @@ stack_configured_%+%1:
     pop edx
     pop ecx
     pop ebx
+    add esp, 0x04
     pop eax
     iretd
 %endmacro

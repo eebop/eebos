@@ -7,6 +7,10 @@ pub struct Screen {
 }
 
 impl Screen {
+    pub fn new() -> Self {
+        Self { line: 0, row: 0 }
+    }
+
     pub fn coord(&self) -> usize {
         return self.line * 80 + self.row;
     }

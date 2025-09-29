@@ -10,11 +10,6 @@ use shared::*;
 
 pub static STATE: State = State::new();
 
-unsafe extern "C" {
-    static mut stored_sp: u32;
-    static mut stack_top: u8;
-}
-
 // pub fn submit_syscall_syscall(cmd: &mut SysCallInternal, state: &mut State) {
 // 	let data = cmd.receive_abi::<shared::NewSysCall>();
 // 	state.interrupts[data.channel as usize] = Some(data.ptr);
@@ -41,35 +36,45 @@ fn exit(mut curr: SysCallData, state: &State) {
 	}
 }
 
+pub fn submit_syscall(mut curr: SysCallData, state: &State) {
+	let syscall = curr.receive_abi::<shared::NewSysCall>();
+	match syscall {
+		NewSysCall::Request(index, f) => {
+			STATE.interrupts.borrow_mut()[index as usize] = Syscall::Request(f, STATE.currentProcess.borrow().unwrap().clone());
+		},
+		NewSysCall::Dispatch(index, f) => {
+			STATE.interrupts.borrow_mut()[index as usize] = Syscall::Dispatch(f, STATE.currentProcess.borrow().unwrap().clone());
+		},
+	}
+}
 
 #[unsafe(no_mangle)]
 extern "C" fn isr_handler(regs: *mut SysCallInternal) {
 	// WARNING
     let regs = SysCallData::new(unsafe { regs.as_mut_unchecked() });
 
-	match STATE.interrupts.borrow()[regs.interrupt as usize].clone() {
+	let int = STATE.interrupts.borrow();
+	let val = int[regs.interrupt as usize];
+	drop(int);
+
+	let mut s = Screen::new();
+
+	writeln!(&mut s, "got: {:#?}, regs = {:#?}", val, *regs);
+
+	match val {
 		Syscall::Request(f, process) => {
 			f(regs, &STATE);
 			return;
 		},
 		Syscall::Dispatch(f, process) => {
 			// We are diverging, so the next interrupt should restart the stack
-			unsafe {
-				stored_sp = (&raw mut stack_top) as u32;
-			}
-			match STATE.currentProcess.replace(Some(process)) {
-				Some(p) => STATE.saves.borrow_mut().push((*regs, p)),
-				None => {
-					// Initialization, no need to store state
-				} 
-			}
-			unsafe {
-				stored_sp = core::mem::transmute(&raw mut stack_top)
-			}
+			let p = STATE.currentProcess.replace(Some(process)).unwrap();
+			STATE.saves.borrow_mut().push((*regs, p));
+
 			STATE.processes.borrow_mut()[process].make_fncall(f);
 		},
 		Syscall::Empty => {
-			panic!("Interrupt occurred but no corresponding interrupt handler\nError: {:#?}", *regs);
+			panic!("Interrupt occurred but no corresponding interrupt handler\nError: {:#x?}", *regs);
 		}
 	}
 

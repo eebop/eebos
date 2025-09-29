@@ -3,6 +3,11 @@ use alloc::vec::Vec;
 use core::ops::{Deref, DerefMut, Index, IndexMut};
 use core::arch::asm;
 
+unsafe extern "C" {
+    static mut stored_sp: u32;
+    static mut stack_top: u8;
+}
+
 #[repr(C, align(0x1000))]
 pub struct Page([u8; 0x1000]);
 
@@ -57,19 +62,24 @@ impl Process {
     }
 
     pub fn make_fncall(&mut self, _start: extern "C" fn() -> !) -> ! {
+
+        unsafe {
+            stored_sp = core::mem::transmute(&raw mut stack_top);
+        }
+
+
         // TODO: Initialization is more complex if you have argv that isn't empty
         self.new_stack();
-        let size = self.stacks.last().unwrap().len() * 0x1000;
-        self.stacks.last_mut().unwrap().last_mut().unwrap()[size-16..size].fill(0); // this sets up argv, argc, envp. all 0
-        
-        let ptr = &raw mut self.stacks.last_mut().unwrap()[size - 16];
+        let size = self.stacks.last_mut().unwrap().as_contiguous().len();
+        assert!(self.stacks.last_mut().unwrap().as_contiguous().len() == 0x4000);
+        self.stacks.last_mut().unwrap().as_contiguous()[size-16..size].fill(0); // this sets up argv, argc, envp. all 0
 
         // ESP must point to the top of our stack
         // EDX should point to the atexit() function (not yet implemented)
         unsafe { asm!(
             "mov esp, {ptr}",
             "call {_start}",
-            ptr = in(reg) &raw mut self.stacks.last_mut().unwrap().last_mut().unwrap()[size],
+            ptr = in(reg) self.stacks.last_mut().unwrap().as_contiguous().as_mut_ptr().wrapping_add(size),
             _start = in(reg) _start,
             options(noreturn)
         )}

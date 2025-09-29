@@ -13,6 +13,8 @@ srcs = boot kernel stdutils gdt pic ports irq page64 core64 sse
 
 modules = test_mod pic
 
+libmod = shared
+
 builddir = build
 
 srcdir = src
@@ -69,7 +71,7 @@ $(builddir)/%.o: $(srcdir)/%.c
 	mkdir -p $(dir $@)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $< -c -o $@
 
-$(builddir)/core64.o: core64/src/*.rs
+$(builddir)/core64.o: core64/src/*.rs $(libmod)/src/*.rs
 	mkdir -p build
 	cd core64 ; cargo rustc --release --target=target.json -Z build-std=core,compiler_builtins,alloc -Z build-std-features=compiler-builtins-mem -- --emit=obj
 	cd core64/target/target/release/deps; for i in *.rlib; do \
@@ -81,7 +83,7 @@ $(builddir)/core64.o: core64/src/*.rs
 
 
 
-$(builddir)/mods/%.o: modules/%/src/main.rs modules/%/src/*.rs
+$(builddir)/mods/%.o: modules/%/src/main.rs modules/%/src/*.rs $(libmod)/src/*.rs
 	mkdir -p build/mods
 	cd modules/$* ; cargo rustc --release --target=i686-unknown-linux-gnu -- -Ctarget-feature=+crt-static -Crelocation-model=pie
 	cp modules/$*/target/i686-unknown-linux-gnu/release/$* $*
