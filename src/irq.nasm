@@ -11,15 +11,15 @@ isr_%+%1: ; we just came in from a int
     xchg [stored_sp], eax
     test eax, eax
     jz stack_configured_%+%1
-    mov esp, eax ; switch to kernel stack if not already on it
+    xchg esp, eax ; switch to kernel stack if not already on it
 
 stack_configured_%+%1:
     
-    push DWORD [eax - 0xc]
-    push DWORD [eax - 0x8]
-    push DWORD [eax - 0x4]
-    push DWORD [eax - 0x0]
-    
+    push DWORD [eax + 0xc]
+    push DWORD [eax + 0x8]
+    push DWORD [eax + 0x4]
+    push DWORD [eax + 0x0]
+
     sub eax, 0x10 ; eax is now old esp
     push eax
 
@@ -33,6 +33,7 @@ stack_configured_%+%1:
     lea eax, [esp] ; eax now stores where we placed our data
 
     push DWORD %1 ; no point to pop
+
     lea ebx, [esp] ; .. and ebx includes the interrupt
 
     sub esp, 0x0c ; We need to align with at least 3 slots left
@@ -41,8 +42,6 @@ stack_configured_%+%1:
     mov [esp+4], eax ; this is for us to remember where we stored the data  
     mov [esp], ebx ; this is the *T arg to isr_handler
     call isr_handler
-
-    xchg bx, bx
 
     mov esp, [esp+4] ; remember where we placed the data
 

@@ -85,7 +85,7 @@ $(builddir)/core64.o: core64/src/*.rs $(libmod)/src/*.rs
 
 $(builddir)/mods/%.o: modules/%/src/main.rs modules/%/src/*.rs $(libmod)/src/*.rs
 	mkdir -p build/mods
-	cd modules/$* ; cargo rustc --release --target=i686-unknown-linux-gnu -- -Ctarget-feature=+crt-static -Crelocation-model=pie
+	cd modules/$* ; cargo rustc --release --target=i686-unknown-linux-gnu -- -Ctarget-feature=+crt-static -Crelocation-model=pie -lc
 	cp modules/$*/target/i686-unknown-linux-gnu/release/$* $*
 	i686-elf-objcopy -I binary -O elf32-i386 $* $@
 	mv $* $(builddir)/mods/$*

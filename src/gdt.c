@@ -95,7 +95,7 @@ void lgdt(uint8_t *target, uint16_t size) {
         "mov %%ax, %%gs\n"
         "mov %%ax, %%ss\n"
 
-        :: "m" (gdtr)
+        :: "m" (gdtr) : "eax"
     );
 }
 

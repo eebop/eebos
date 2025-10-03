@@ -1,1 +1,1 @@
-/home/eebop/ostest/modules/test_mod/target/i686-unknown-linux-gnu/release/test_mod: /home/eebop/ostest/modules/test_mod/src/main.rs /home/eebop/ostest/shared/src/lib.rs /home/eebop/ostest/shared/src/ports.rs /home/eebop/ostest/shared/src/process.rs /home/eebop/ostest/shared/src/screen.rs
+/home/eebop/eebos/modules/test_mod/target/i686-unknown-linux-gnu/release/test_mod: /home/eebop/eebos/modules/test_mod/src/main.rs /home/eebop/eebos/shared/src/lib.rs /home/eebop/eebos/shared/src/ports.rs /home/eebop/eebos/shared/src/process.rs /home/eebop/eebos/shared/src/screen.rs

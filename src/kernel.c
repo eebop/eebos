@@ -93,7 +93,7 @@ void kernel_main(void)
 
 	memsetup();
 
-	uint8_t gdtarray[0x28];//= malloc(0x28);
+	uint8_t *gdtarray = malloc(0x28);
 
 	GDTSegment nulle = {};
 
