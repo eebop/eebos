@@ -53,13 +53,12 @@ static EMPTY_ALLOCATOR: EmptyAllocator = EmptyAllocator;
 #[unsafe(no_mangle)]
 pub extern "C" fn main() {
     let mut s = shared::screen::Screen {line: 0, row: 0};
-    writeln!(&mut s, "test_here");
     let data = NewSysCall::Request(0x20, clock);
-    writeln!(&mut s, "test_here");
     make_syscall::<NewSysCall, (), 0x30>(data);
-    writeln!(&mut s, "test_here");
+    s.clear_screen();
+    writeln!(&mut s, "here now");
     enable(0);
-    writeln!(&mut s, "test_here");
+    loop {}
 }
 
 fn get_state() -> u16 {
@@ -85,6 +84,7 @@ fn enable(line: u8) {
 }
 
 pub fn clock(cmd: SysCallData, state: &State) {
+    state.screen.borrow_mut().clear_screen();
 	writeln!(state.screen.borrow_mut(), "Clock!");
 	sendEOI(0);
 }

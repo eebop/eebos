@@ -3,6 +3,7 @@ use shared::screen::Screen;
 use core::fmt::Write;
 use alloc::vec::Vec;
 use core::cell::{RefCell, RefMut};
+use core::arch::asm;
 
 use shared::SysCallInternal;
 use shared::State;
@@ -50,7 +51,6 @@ pub fn submit_syscall(mut curr: SysCallData, state: &State) {
 
 #[unsafe(no_mangle)]
 extern "C" fn isr_handler(regs: *mut SysCallInternal) {
-	// WARNING
     let regs = SysCallData::new(unsafe { regs.as_mut_unchecked() });
 
 	let int = STATE.interrupts.borrow();

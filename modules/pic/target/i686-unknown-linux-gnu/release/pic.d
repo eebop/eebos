@@ -1,1 +1,1 @@
-/home/eebop/eebos/modules/pic/target/i686-unknown-linux-gnu/release/pic: /home/eebop/eebos/modules/pic/src/main.rs /home/eebop/eebos/shared/src/lib.rs /home/eebop/eebos/shared/src/ports.rs /home/eebop/eebos/shared/src/process.rs /home/eebop/eebos/shared/src/screen.rs
+/home/eebop/ostest/modules/pic/target/i686-unknown-linux-gnu/release/pic: /home/eebop/ostest/modules/pic/src/main.rs /home/eebop/ostest/shared/src/lib.rs /home/eebop/ostest/shared/src/ports.rs /home/eebop/ostest/shared/src/process.rs /home/eebop/ostest/shared/src/screen.rs

@@ -2,6 +2,7 @@
 
 extern crate alloc;
 
+use core::clone::UseCloned;
 use core::*;
 use core::arch::asm;
 use core::mem::MaybeUninit;
@@ -19,16 +20,13 @@ use crate::process::Process;
 
 // Makes a syscall and then interprets the return value
 // User side api
-pub fn make_syscall<T: Copy, U: Copy, const CHANNEL: u8>(mut data: T) -> U {
+pub fn make_syscall<T: Clone, U: Clone, const CHANNEL: u8>(mut data: T) -> U {
 	let mut out: MaybeUninit<U> = MaybeUninit::uninit();
-	let mut buff: MaybeUninit<[u32; 4]> = MaybeUninit::uninit();
 	unsafe { asm! (
-		"xchg eax, esp",
-		"xchg bx, bx",
+		"mov eax, esp", // Rust garentees that there is no redzone
 		"int {0}",
-		"mov esp, eax",
+		"mov esp, eax", // We must restore esp as it is corrupted however
 		const CHANNEL,
-		in("eax") (&raw mut buff).wrapping_add(4), // point to top bc stack grows downwards
 		lateout("eax") _,
 		in("ecx") &raw mut data,
 		in("edx") &raw mut out,
@@ -64,9 +62,9 @@ pub struct SysCallInternal {
 impl SysCallInternal {
 	// Interprets the syscall abi to receive a element of T
 	// OS side api
-	pub fn receive_abi<T: Copy>(&self) -> T {
+	pub fn receive_abi<T: Clone>(&self) -> T {
 		let data = self.ecx as *const T;
-		unsafe { *data }.clone() // We must clone bc data is owned by caller
+		unsafe { (*data).clone() } // We must clone bc data is owned by caller
 	}
 }
 
@@ -95,9 +93,9 @@ impl<'a> SysCallData<'a> {
 
 	// Configures SysCallInternal to read having a member of T
 	// OS side api
-	pub fn send_abi<T: Copy>(self, val: &T) {
+	pub fn send_abi<T: Clone>(self, val: &T) {
 		let ptr = self.edx as *mut T;
-		unsafe { *ptr = *val };
+		unsafe { *ptr = val.clone() };
 	}
 }
 

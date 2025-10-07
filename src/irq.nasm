@@ -5,13 +5,16 @@ isr_%+%1: ; we just came in from a int
           ; which pushed the following data to the stack:
           ; EIP CS (zero-padded to dword) EFLAGS
 
-    push eax
+    xchg bx, bx
+
+    push eax ; store eax, then use it as an old esp ptr
+    mov eax, esp
     
-    mov eax, 0
-    xchg [stored_sp], eax
-    test eax, eax
-    jz stack_configured_%+%1
-    xchg esp, eax ; switch to kernel stack if not already on it
+    mov esp, 0
+    xchg [stored_sp], esp
+    test esp, esp
+    jnz stack_configured_%+%1
+    mov esp, eax ; switch to kernel stack if not already on it
 
 stack_configured_%+%1:
     
@@ -42,6 +45,8 @@ stack_configured_%+%1:
     mov [esp+4], eax ; this is for us to remember where we stored the data  
     mov [esp], ebx ; this is the *T arg to isr_handler
     call isr_handler
+
+    xchg bx, bx
 
     mov esp, [esp+4] ; remember where we placed the data
 
