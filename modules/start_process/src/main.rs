@@ -45,14 +45,20 @@ static EMPTY_ALLOCATOR: EmptyAllocator = EmptyAllocator;
 
 static ret_state: SyncUnsafeCell<Option<SysCallInternal>> = SyncUnsafeCell::new(None);
 
+static proc_vec: SyncUnsafeCell<Option<Process>> = SyncUnsafeCell::new(vec![]);
+
 fn enter(mut curr: SysCallData, state: &State) {
     unsafe { ret_state.get().as_mut_unchecked() = Some(*curr) };
-    let val = curr.receive_abi::<usize>();
+}
+
+fn exit(mut curr: SysCallData, state: &State) {
+    *curr = unsafe { *ret_state.get().as_mut_unchecked() }.unwrap();
+    unsafe { *ret_state.get() = None }
 }
 
 fn do_init_mod(name: String) {
     // First, load the mod into memory
-    make_syscall::<String, Process, 0xfe>(name);
+    let proc = make_syscall::<String, Process, 0xfe>(name);
     
 }
 
