@@ -1,8 +1,8 @@
 #![no_std]
 
+#![macro_use]
 extern crate alloc;
 
-use core::clone::UseCloned;
 use core::*;
 use core::arch::asm;
 use core::mem::MaybeUninit;
@@ -10,6 +10,7 @@ use core::mem::MaybeUninit;
 pub mod screen;
 pub mod ports;
 pub mod process;
+pub mod api;
 use screen::Screen;
 use core::cell::{RefCell};
 use alloc::{vec::Vec};
@@ -36,10 +37,9 @@ pub fn make_syscall<T: Clone, U: Clone, const CHANNEL: u8>(mut data: T) -> U {
 }
 
 #[derive(Copy, Clone)]
-pub enum NewSysCall {
-	Request(u8, fn(SysCallData, &State)),
-	Dispatch(u8, extern "C" fn() -> !)
-
+pub struct NewSysCall {
+	pub channel: u8,
+	pub ptr: fn(SysCallData, &State)
 }
 
 #[repr(C)]
@@ -104,7 +104,6 @@ pub enum Syscall {
 	// A request claims a mutable lock on the OS state
 	// Used to modify core state
 	Request(fn(SysCallData, &State), usize),
-	Dispatch(extern "C" fn() -> !, usize),
 	#[default]
 	Empty
 }

@@ -11,6 +11,7 @@ use core::fmt::Write;
 use core::alloc::GlobalAlloc;
 
 use shared::process::Process;
+use shared::NewSysCall;
 use shared::State;
 use shared::SysCallData;
 use shared::SysCallInternal;
@@ -45,10 +46,10 @@ static EMPTY_ALLOCATOR: EmptyAllocator = EmptyAllocator;
 
 static ret_state: SyncUnsafeCell<Option<SysCallInternal>> = SyncUnsafeCell::new(None);
 
-static proc_vec: SyncUnsafeCell<Option<Process>> = SyncUnsafeCell::new(vec![]);
-
 fn enter(mut curr: SysCallData, state: &State) {
-    unsafe { ret_state.get().as_mut_unchecked() = Some(*curr) };
+    *unsafe { ret_state.get().as_mut_unchecked() } = Some(*curr);
+    let mut proc: Process = curr.receive_abi();
+    proc.make_fncall(proc._start);
 }
 
 fn exit(mut curr: SysCallData, state: &State) {
@@ -56,13 +57,18 @@ fn exit(mut curr: SysCallData, state: &State) {
     unsafe { *ret_state.get() = None }
 }
 
-fn do_init_mod(name: String) {
+fn do_init_mod(name: String) -> Process {
     // First, load the mod into memory
     let proc = make_syscall::<String, Process, 0xfe>(name);
+    // Then, fire enter(). It'll have to call exit()
+    make_syscall::<Process, (), 0x40>(proc);
     
+    proc    
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn main() {
+    make_syscall::<_, (), 0x30>(NewSysCall {channel: 0x40, ptr: enter});
+    make_syscall::<_, (), 0x30>(NewSysCall {channel: 0x41, ptr: exit});
     loop {}
 }

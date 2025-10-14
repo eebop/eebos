@@ -3,7 +3,7 @@
 #![feature(allocator_api)]
 #![feature(ptr_mask)]
 #![feature(alloc_error_handler)]
-#![feature(ascii_char)]
+#![feature(macro_metavar_expr_concat)]
 
 #![allow(internal_features)]
 #![feature(rustc_attrs)]
@@ -29,6 +29,8 @@ extern crate alloc;
 
 use core::*;
 use core::{arch::asm, alloc::{GlobalAlloc, Layout}, fmt::{Write}, panic::PanicInfo};
+use alloc::collections::btree_map::BTreeMap;
+use alloc::string::String;
 use alloc::vec::{self, Vec};
 use elf::symbol;
 use elf::{self, endian::AnyEndian, segment::ProgramHeader, ElfBytes};
@@ -37,6 +39,7 @@ mod syscall;
 use shared::process::{Page, Process};
 use shared::screen::Screen;
 use shared::process::CoherentMultidemsionality;
+use shared::{State, SysCallData, SysCallInternal};
 
 use crate::syscall::STATE;
 
@@ -48,13 +51,35 @@ fn panic<'a, 'b>(info: &'a PanicInfo<'b>) -> ! {
 }
 
 unsafe extern "C" {
-    static _binary_pic_start: u8;
-    static _binary_pic_size: u8;
-    static _binary_pic_end: u8;
-
     fn call64(ptr: u32);
 
 }
+
+macro_rules! elf_data {
+    ($data:ident) => {
+        {
+            unsafe extern "C" {
+                static ${ concat(_binary_, $data, _start) }: u8;
+                static ${ concat(_binary_, $data, _size ) }: u8; 
+            }
+            unsafe {
+                core::slice::from_raw_parts_mut(&raw mut ${ concat(_binary_, $data, _start) } , &raw const ${ concat(_binary_, $data, _start) } as usize)
+            }
+        }
+    }
+}
+
+macro_rules! elf_map {
+    ($( $i:ident ),*) => {
+        [
+            $( (stringify!($i), elf_data!($i)) ),*
+        ]
+    };
+}
+
+// static DATA: BTreeMap<&'static str, &'static mut [u8]> = BTreeMap::from(elf_map!(pic, start_process, test_mod));
+
+const DATA = elf_map!(pic);
 
 // The inits aren't actually called, so global = 0 does nothing
 // Initialization must be done in rustmain()
@@ -157,22 +182,6 @@ fn relocate_as_ptr(symbol: usize, relocations: &Vec<RelocInfo>) -> usize {
     relocations[index].start + address as usize
 }
 
-fn debug_section(s: &mut Screen, name: &str, file: &ElfBytes<AnyEndian>) {
-    let got = file.section_header_by_name(name).unwrap().unwrap();
-
-    let (data, com) = file.section_data(&got).unwrap();
-
-
-    writeln!(s, "here\n");
-
-    let None = com else {
-        panic!("Compression isn't implemented!")
-    };
-
-    writeln!(s, "data for section '{}': {:#010x?}", name, reinterpret_slice::<u8, u32>(data).unwrap());
-
-}
-
 fn as_fn_ptr<T>(ptr: usize) -> fn() -> T {
     unsafe {
         core::mem::transmute(ptr)
@@ -192,9 +201,8 @@ pub extern "C" fn rustmain(mem: *mut u8) {
 
     
 
-    let code = unsafe {
-        core::slice::from_raw_parts(&_binary_pic_start as *const u8, &_binary_pic_size as *const u8 as usize)
-    };
+    // let code = unsafe {
+    let code = elf_data!(pic);
     let pic = load_elf(s, code);
         
     STATE.processes.borrow_mut().push(pic);
@@ -216,6 +224,12 @@ pub extern "C" fn rustmain(mem: *mut u8) {
     let ptr = p[0]._start;
 
     p[0].make_fncall(ptr);
+}
+
+pub fn proc_by_name(data: SysCallData, state: &State) {
+    let input = data.receive_abi::<String>();
+    let x = *DATA.get(&input).expect("Invalid proc name entered");
+
 }
 
 fn load_elf(mut s: Screen, code: &[u8]) -> Process {
@@ -326,7 +340,7 @@ fn load_elf(mut s: Screen, code: &[u8]) -> Process {
                             // Ignored, internal record-keeping
                         }
                         _ => {
-                            writeln!(&mut s, "Unknown dynamic symbol: {:x}", symbol.d_tag);
+                            panic!("Unknown dynamic symbol: {:x}", symbol.d_tag);
                         }
                         
                     }
@@ -348,7 +362,7 @@ fn load_elf(mut s: Screen, code: &[u8]) -> Process {
                 // Unwinding is not yet supported!
             }
             other => {
-                writeln!(&mut s, "Unknown program header: {:x}", other);
+                panic!("Unknown program header: {:x}", other);
             }
             
         }

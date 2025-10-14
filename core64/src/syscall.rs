@@ -39,14 +39,9 @@ fn exit(mut curr: SysCallData, state: &State) {
 
 pub fn submit_syscall(mut curr: SysCallData, state: &State) {
 	let syscall = curr.receive_abi::<shared::NewSysCall>();
-	match syscall {
-		NewSysCall::Request(index, f) => {
-			STATE.interrupts.borrow_mut()[index as usize] = Syscall::Request(f, STATE.currentProcess.borrow().unwrap().clone());
-		},
-		NewSysCall::Dispatch(index, f) => {
-			STATE.interrupts.borrow_mut()[index as usize] = Syscall::Dispatch(f, STATE.currentProcess.borrow().unwrap().clone());
-		},
-	}
+
+	
+	state.interrupts.borrow_mut()[syscall.channel as usize] = Syscall::Request(syscall.ptr, state.currentProcess.borrow().unwrap().clone());
 }
 
 #[unsafe(no_mangle)]
@@ -61,17 +56,12 @@ extern "C" fn isr_handler(regs: *mut SysCallInternal) {
 
 	writeln!(&mut s, "got: {:#?}, regs = {:#?}", val, *regs);
 
+	
+
 	match val {
 		Syscall::Request(f, process) => {
 			f(regs, &STATE);
 			return;
-		},
-		Syscall::Dispatch(f, process) => {
-			// We are diverging, so the next interrupt should restart the stack
-			let p = STATE.currentProcess.replace(Some(process)).unwrap();
-			STATE.saves.borrow_mut().push((*regs, p));
-
-			STATE.processes.borrow_mut()[process].make_fncall(f);
 		},
 		Syscall::Empty => {
 			panic!("Interrupt occurred but no corresponding interrupt handler\nError: {:#x?}", *regs);

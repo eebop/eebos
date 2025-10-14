@@ -1,5 +1,6 @@
 use alloc::boxed::Box;
-use alloc::vec::Vec;
+use alloc::vec;
+use alloc::vec::{Vec};
 use core::ops::{Deref, DerefMut, Index, IndexMut};
 use core::arch::asm;
 
@@ -57,6 +58,14 @@ pub struct Process {
 }
 
 impl Process {
+    pub fn empty() -> Self {
+        Self {
+            got_ptr: &mut [][..] as *mut [u8],
+            _start: unsafe { core::mem::transmute(core::ptr::null::<()>()) },
+            owned_data: vec![],
+            stacks: vec![]
+        }
+    }
     pub fn new_stack(&mut self) {
         self.stacks.push(Page::uninit_many(4));
     }
