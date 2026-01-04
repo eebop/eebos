@@ -11,7 +11,7 @@ QEMUFLAGS = -no-reboot -no-shutdown #-d cpu_reset,int
 # all filenames to build, minus extension
 srcs = boot kernel stdutils gdt pic ports irq page64 core64 sse
 
-modules = test_mod pic
+modules = start_process pic
 
 libmod = shared
 
@@ -71,9 +71,12 @@ $(builddir)/%.o: $(srcdir)/%.c
 	mkdir -p $(dir $@)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $< -c -o $@
 
-$(builddir)/core64.o: core64/src/*.rs $(libmod)/src/*.rs
-	mkdir -p build
+core64/target/target/release/deps: core64/src/*.rs $(libmod)/src/*.rs
 	cd core64 ; cargo rustc --release --target=target.json -Z build-std=core,compiler_builtins,alloc -Z build-std-features=compiler-builtins-mem -- --emit=obj
+
+
+$(builddir)/core64.o: core64/target/target/release/deps
+	mkdir -p build
 	cd core64/target/target/release/deps; for i in *.rlib; do \
 		mkdir -p $${i%.rlib}; cd $${i%.rlib}; ar x ../$$i; \
 		ar r ../../libcore64.rlib *; \
@@ -81,11 +84,12 @@ $(builddir)/core64.o: core64/src/*.rs $(libmod)/src/*.rs
 	done
 	cp core64/target/target/release/libcore64.rlib $@
 
+modules/%/target/i686-unknown-linux-gnu/release/%: modules/%/src/main.rs modules/%/src/*.rs $(libmod)/src/*.rs
+	cd modules/$* ; cargo rustc --release --target=i686-unknown-linux-gnu -Z build-std=core,compiler_builtins,alloc -Z build-std-features=compiler-builtins-mem -- -Ctarget-feature=+crt-static -Crelocation-model=pie
 
 
-$(builddir)/mods/%.o: modules/%/src/main.rs modules/%/src/*.rs $(libmod)/src/*.rs
+$(builddir)/mods/%.o: modules/%/target/i686-unknown-linux-gnu/release/%
 	mkdir -p build/mods
-	cd modules/$* ; cargo rustc --release --target=i686-unknown-linux-gnu -- -Ctarget-feature=+crt-static -Crelocation-model=pie -lc
 	cp modules/$*/target/i686-unknown-linux-gnu/release/$* $*
 	i686-elf-objcopy -I binary -O elf32-i386 $* $@
 	mv $* $(builddir)/mods/$*
@@ -102,3 +106,5 @@ clean:
 		pwd=$$(pwd); \
 		cd $$i; cargo clean -p $$( basename $$i ) ; cd $$pwd; \
 	done;
+	-rm -r core64/target/target/release/deps
+	-rm core64/target/target/release/libcore64.rlib

@@ -8,9 +8,12 @@
 #![allow(internal_features)]
 #![feature(rustc_attrs)]
 #![feature(ptr_as_ref_unchecked)]
+#![feature(slice_from_ptr_range)]
+#![feature(const_slice_from_ptr_range)]
+#![feature(sync_unsafe_cell)]
 
 // Todo: add checks for all the writeln!s
-#![allow(unused_must_use)]
+#![allow(unused)]
 
 // This symbol is required for an allocator to work with --emit obj in no_std
 // My understanding is that it "tells" the compiler that you know what you're doing
@@ -27,9 +30,12 @@ fn __rust_alloc_error_handler(_: core::alloc::Layout) -> ! {
 #[macro_use]
 extern crate alloc;
 
+use core::cell::SyncUnsafeCell;
 use core::*;
+use core::ops::Range;
 use core::{arch::asm, alloc::{GlobalAlloc, Layout}, fmt::{Write}, panic::PanicInfo};
-use alloc::collections::btree_map::BTreeMap;
+use alloc::alloc::{Allocator, Global};
+use alloc::collections::btree_map::{BTreeMap};
 use alloc::string::String;
 use alloc::vec::{self, Vec};
 use elf::symbol;
@@ -38,8 +44,9 @@ use elf::{self, endian::AnyEndian, segment::ProgramHeader, ElfBytes};
 mod syscall;
 use shared::process::{Page, Process};
 use shared::screen::Screen;
-use shared::process::CoherentMultidemsionality;
+use shared::process::PageAligned;
 use shared::{State, SysCallData, SysCallInternal};
+use shared::std::{DummyAllocator, ManualOnceCell};
 
 use crate::syscall::STATE;
 
@@ -59,11 +66,11 @@ macro_rules! elf_data {
     ($data:ident) => {
         {
             unsafe extern "C" {
-                static ${ concat(_binary_, $data, _start) }: u8;
-                static ${ concat(_binary_, $data, _size ) }: u8; 
+                static mut ${ concat(_binary_, $data, _start) }: u8;
+                static mut ${ concat(_binary_, $data, _end  ) }: u8; 
             }
             unsafe {
-                core::slice::from_raw_parts_mut(&raw mut ${ concat(_binary_, $data, _start) } , &raw const ${ concat(_binary_, $data, _start) } as usize)
+                &raw mut ${ concat(_binary_, $data, _start) }..&raw mut ${ concat(_binary_, $data, _end ) }
             }
         }
     }
@@ -77,9 +84,10 @@ macro_rules! elf_map {
     };
 }
 
-// static DATA: BTreeMap<&'static str, &'static mut [u8]> = BTreeMap::from(elf_map!(pic, start_process, test_mod));
+const _ELF_DATA: &'static [(&'static str, Range<*mut u8>)] = &elf_map!(pic);
 
-const DATA = elf_map!(pic);
+static ELF_DATA: ManualOnceCell<BTreeMap<&str, &[u8]>> = ManualOnceCell::new();
+
 
 // The inits aren't actually called, so global = 0 does nothing
 // Initialization must be done in rustmain()
@@ -128,7 +136,6 @@ fn reinterpret_slice<T, U>(i: &[T]) -> Option<&[U]> {
     }
 }
 
-
 fn reinterpret_slice_mut<T, U>(i: &mut [T]) -> Option<&mut [U]> {
     let size = i.len() * size_of::<T>();
     if size % size_of::<U>() != 0 {
@@ -140,31 +147,6 @@ fn reinterpret_slice_mut<T, U>(i: &mut [T]) -> Option<&mut [U]> {
         Some(slice::from_raw_parts_mut(ptr, newsize))
     }
 }
-
-// fn aligned_slice<T: Copy + Default>(s: &mut Screen, size: usize, align: usize) -> &'static mut [T] {
-//     assert!(align.is_power_of_two());
-//     let layout = Layout::from_size_align(size * size_of::<T>(), cmp::max(align, align_of::<T>())).unwrap();
-//     let out = unsafe {        
-        
-//         // unsafe {
-//         //     DATAPTR = DATAPTR.add(add_on)
-//         // }
-
-//         // writeln!(s, "DATA is currently: {:x}", unsafe {DATAPTR as usize});
-
-
-//         let aligned_ptr = alloc::alloc::alloc(layout) as *mut T;
-
-
-//         // writeln!(s, "Alloc; ptr is {:x}, DATA is {:x}", aligned_ptr as usize, unsafe { DATAPTR as usize});
-//         slice::from_raw_parts_mut(aligned_ptr, size)
-//     };
-
-//     for elem in out.iter_mut() {
-//         *elem = T::default();
-//     }
-//     out
-// }
 
 fn relocate_symbol(symbol: u64, relocations: &Vec<RelocInfo>) -> (usize, u64) {
     for reloc in relocations.iter().enumerate() {
@@ -188,11 +170,34 @@ fn as_fn_ptr<T>(ptr: usize) -> fn() -> T {
     }
 }
 
+fn init_elf_data() {
+    let mut data = BTreeMap::<&str, &[u8]>::new();
+    for entry in _ELF_DATA {
+        // Unsafe here is fine because it's garenteed to be a valid slice at link time
+        // We just can't make it a slice because code can't run at link time
+        data.insert(entry.0, unsafe { slice::from_mut_ptr_range(entry.1.clone()) } );
+    }
+    unsafe { ELF_DATA.init(data) };
+}
+
+fn string_elf(name: &str) -> Process<Global, DummyAllocator> {
+    let data = ELF_DATA.get()[name];
+    load_elf(data)
+}
+
+fn load_syscall(data: SysCallData, state: &State) {
+    let inner: String = data.receive_abi();
+    let out = string_elf(&inner);
+    data.send_abi(&out);
+}
+
 #[unsafe(no_mangle)]
 pub extern "C" fn rustmain(mem: *mut u8) {
-    // This code must be preformed as soon as we get control
+    // This code must be performed as soon as we get control
     unsafe {
         DATAPTR = mem;
+        // Every instance if ManualOnceCell must be initialized here
+        init_elf_data();
     }
 
     let mut s = Screen { line: 0, row: 0};
@@ -201,38 +206,32 @@ pub extern "C" fn rustmain(mem: *mut u8) {
 
     
 
-    // let code = unsafe {
-    let code = elf_data!(pic);
-    let pic = load_elf(s, code);
+    let code = unsafe { slice::from_mut_ptr_range(elf_data!(pic)) };
+    let mut pic = load_elf::<Global>(code);
         
-    STATE.processes.borrow_mut().push(pic);
+    // STATE.processes.borrow_mut().push(pic);
 
-    STATE.currentProcess.replace(Some(0));
+    // STATE.currentProcess.replace(Some(0));
 
 
-    {
-        let mut ptr = STATE.interrupts.borrow_mut();
-        ptr[0x30] = shared::Syscall::Request(syscall::submit_syscall, 0);
-        drop(ptr);
-    };
+    // {    
+    //     let mut ptr = STATE.interrupts.borrow_mut();
+    //     ptr[0x30] = shared::Syscall::Request(syscall::submit_syscall, 0);
+    //     ptr[0xfe] = shared::Syscall::Request(load_syscall, 0);
+    //     drop(ptr);
+    // };
 
-    // SAFETY: we will not aquire another borrow of processes
-    // We must do this because making a syscall doesn't drop anything
-    // Meaning if we did .borrow_mut() then after the syscall it'd be unusable
-    let p = unsafe { STATE.processes.as_ptr().as_mut_unchecked() };
+    // // SAFETY: we will not aquire another borrow of processes
+    // // We must do this because making a syscall doesn't drop anything
+    // // Meaning if we did .borrow_mut() then after the syscall it'd be unusable
+    // let p = unsafe { STATE.processes.as_ptr().as_mut_unchecked() };
 
-    let ptr = p[0]._start;
+    let ptr = pic._start;
 
-    p[0].make_fncall(ptr);
+    pic.make_fncall(ptr, Global);
 }
 
-pub fn proc_by_name(data: SysCallData, state: &State) {
-    let input = data.receive_abi::<String>();
-    let x = *DATA.get(&input).expect("Invalid proc name entered");
-
-}
-
-fn load_elf(mut s: Screen, code: &[u8]) -> Process {
+fn load_elf<A: Allocator + Clone>(code: &[u8]) -> Process<Global, A> {
     let file = ElfBytes::<AnyEndian>::minimal_parse(code).expect("Can't parse!");
 
     let x = file.segments().expect("Can't get segments!");
@@ -375,7 +374,7 @@ fn load_elf(mut s: Screen, code: &[u8]) -> Process {
 
     let num_pages = usize::div_ceil(latest - earliest, 0x1000);
 
-    let mut owned_data = Page::uninit_many(num_pages as usize);
+    let mut owned_data = Page::uninit_many(num_pages as usize, Global);
 
     let new_earliest = owned_data.as_ptr() as usize; 
 
@@ -437,10 +436,10 @@ fn load_elf(mut s: Screen, code: &[u8]) -> Process {
 
     let got_ptr = &raw mut *got_data;
 
-    Process {
+    Process::<Global, A> {
         got_ptr: got_ptr as *mut [u8],
         owned_data: vec![owned_data],
-        stacks: vec![],
+        stacks: None,
         _start: _start
     }
 }

@@ -1,0 +1,186 @@
+   0.012004347s  INFO prepare_target{force=false package_id=start_process v0.1.0 (/home/eebop/ostest/modules/start_process) target="start_process"}: cargo::core::compiler::fingerprint: fingerprint error for start_process v0.1.0 (/home/eebop/ostest/modules/start_process)/Check { test: true }/TargetInner { name: "start_process", doc: true, ..: with_path("/home/eebop/ostest/modules/start_process/src/main.rs", Edition2024) }
+   0.012063067s  INFO prepare_target{force=false package_id=start_process v0.1.0 (/home/eebop/ostest/modules/start_process) target="start_process"}: cargo::core::compiler::fingerprint:     err: failed to read `/home/eebop/ostest/modules/start_process/target/debug/.fingerprint/start_process-677a336f58da847d/test-bin-start_process`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: cargo_util::paths::read_bytes
+   1: cargo_util::paths::read
+   2: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   3: cargo::core::compiler::fingerprint::prepare_target
+   4: cargo::core::compiler::compile
+   5: <cargo::core::compiler::build_runner::BuildRunner>::compile
+   6: cargo::ops::cargo_compile::compile_ws
+   7: cargo::ops::cargo_compile::compile_with_exec
+   8: cargo::ops::cargo_compile::compile
+   9: cargo::commands::check::exec
+  10: <cargo::cli::Exec>::exec
+  11: cargo::main
+  12: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  13: std::rt::lang_start::<()>::{closure#0}
+  14: core::ops::function::impls::<impl core::ops::function::FnOnce<A> for &F>::call_once
+             at /rustc/a9d0a6f15533a364816c4d81e2192009ef601d33/library/core/src/ops/function.rs:287:21
+  15: std::panicking::catch_unwind::do_call
+             at /rustc/a9d0a6f15533a364816c4d81e2192009ef601d33/library/std/src/panicking.rs:590:40
+  16: std::panicking::catch_unwind
+             at /rustc/a9d0a6f15533a364816c4d81e2192009ef601d33/library/std/src/panicking.rs:553:19
+  17: std::panic::catch_unwind
+             at /rustc/a9d0a6f15533a364816c4d81e2192009ef601d33/library/std/src/panic.rs:359:14
+  18: std::rt::lang_start_internal::{{closure}}
+             at /rustc/a9d0a6f15533a364816c4d81e2192009ef601d33/library/std/src/rt.rs:175:24
+  19: std::panicking::catch_unwind::do_call
+             at /rustc/a9d0a6f15533a364816c4d81e2192009ef601d33/library/std/src/panicking.rs:590:40
+  20: std::panicking::catch_unwind
+             at /rustc/a9d0a6f15533a364816c4d81e2192009ef601d33/library/std/src/panicking.rs:553:19
+  21: std::panic::catch_unwind
+             at /rustc/a9d0a6f15533a364816c4d81e2192009ef601d33/library/std/src/panic.rs:359:14
+  22: std::rt::lang_start_internal
+             at /rustc/a9d0a6f15533a364816c4d81e2192009ef601d33/library/std/src/rt.rs:171:5
+  23: main
+  24: __libc_start_call_main
+             at ./csu/../sysdeps/nptl/libc_start_call_main.h:58:16
+  25: __libc_start_main_impl
+             at ./csu/../csu/libc-start.c:360:3
+  26: <unknown>
+   0.078191116s  INFO prepare_target{force=false package_id=shared v0.1.0 (/home/eebop/ostest/shared) target="shared"}: cargo::core::compiler::fingerprint: fingerprint error for shared v0.1.0 (/home/eebop/ostest/shared)/Check { test: false }/TargetInner { name_inferred: true, ..: lib_target("shared", ["lib"], "/home/eebop/ostest/shared/src/lib.rs", Edition2024) }
+   0.078211344s  INFO prepare_target{force=false package_id=shared v0.1.0 (/home/eebop/ostest/shared) target="shared"}: cargo::core::compiler::fingerprint:     err: failed to read `/home/eebop/ostest/modules/start_process/target/debug/.fingerprint/shared-33d034a9c3731aa7/lib-shared`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: cargo_util::paths::read_bytes
+   1: cargo_util::paths::read
+   2: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   3: cargo::core::compiler::fingerprint::prepare_target
+   4: cargo::core::compiler::compile
+   5: cargo::core::compiler::compile
+   6: <cargo::core::compiler::build_runner::BuildRunner>::compile
+   7: cargo::ops::cargo_compile::compile_ws
+   8: cargo::ops::cargo_compile::compile_with_exec
+   9: cargo::ops::cargo_compile::compile
+  10: cargo::commands::check::exec
+  11: <cargo::cli::Exec>::exec
+  12: cargo::main
+  13: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  14: std::rt::lang_start::<()>::{closure#0}
+  15: core::ops::function::impls::<impl core::ops::function::FnOnce<A> for &F>::call_once
+             at /rustc/a9d0a6f15533a364816c4d81e2192009ef601d33/library/core/src/ops/function.rs:287:21
+  16: std::panicking::catch_unwind::do_call
+             at /rustc/a9d0a6f15533a364816c4d81e2192009ef601d33/library/std/src/panicking.rs:590:40
+  17: std::panicking::catch_unwind
+             at /rustc/a9d0a6f15533a364816c4d81e2192009ef601d33/library/std/src/panicking.rs:553:19
+  18: std::panic::catch_unwind
+             at /rustc/a9d0a6f15533a364816c4d81e2192009ef601d33/library/std/src/panic.rs:359:14
+  19: std::rt::lang_start_internal::{{closure}}
+             at /rustc/a9d0a6f15533a364816c4d81e2192009ef601d33/library/std/src/rt.rs:175:24
+  20: std::panicking::catch_unwind::do_call
+             at /rustc/a9d0a6f15533a364816c4d81e2192009ef601d33/library/std/src/panicking.rs:590:40
+  21: std::panicking::catch_unwind
+             at /rustc/a9d0a6f15533a364816c4d81e2192009ef601d33/library/std/src/panicking.rs:553:19
+  22: std::panic::catch_unwind
+             at /rustc/a9d0a6f15533a364816c4d81e2192009ef601d33/library/std/src/panic.rs:359:14
+  23: std::rt::lang_start_internal
+             at /rustc/a9d0a6f15533a364816c4d81e2192009ef601d33/library/std/src/rt.rs:171:5
+  24: main
+  25: __libc_start_call_main
+             at ./csu/../sysdeps/nptl/libc_start_call_main.h:58:16
+  26: __libc_start_main_impl
+             at ./csu/../csu/libc-start.c:360:3
+  27: <unknown>
+   0.078457766s  INFO prepare_target{force=false package_id=start_process v0.1.0 (/home/eebop/ostest/modules/start_process) target="start_process"}: cargo::core::compiler::fingerprint: fingerprint error for start_process v0.1.0 (/home/eebop/ostest/modules/start_process)/Check { test: false }/TargetInner { name: "start_process", doc: true, ..: with_path("/home/eebop/ostest/modules/start_process/src/main.rs", Edition2024) }
+   0.078470070s  INFO prepare_target{force=false package_id=start_process v0.1.0 (/home/eebop/ostest/modules/start_process) target="start_process"}: cargo::core::compiler::fingerprint:     err: failed to read `/home/eebop/ostest/modules/start_process/target/debug/.fingerprint/start_process-f12856e60925bec7/bin-start_process`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: cargo_util::paths::read_bytes
+   1: cargo_util::paths::read
+   2: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   3: cargo::core::compiler::fingerprint::prepare_target
+   4: cargo::core::compiler::compile
+   5: <cargo::core::compiler::build_runner::BuildRunner>::compile
+   6: cargo::ops::cargo_compile::compile_ws
+   7: cargo::ops::cargo_compile::compile_with_exec
+   8: cargo::ops::cargo_compile::compile
+   9: cargo::commands::check::exec
+  10: <cargo::cli::Exec>::exec
+  11: cargo::main
+  12: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  13: std::rt::lang_start::<()>::{closure#0}
+  14: core::ops::function::impls::<impl core::ops::function::FnOnce<A> for &F>::call_once
+             at /rustc/a9d0a6f15533a364816c4d81e2192009ef601d33/library/core/src/ops/function.rs:287:21
+  15: std::panicking::catch_unwind::do_call
+             at /rustc/a9d0a6f15533a364816c4d81e2192009ef601d33/library/std/src/panicking.rs:590:40
+  16: std::panicking::catch_unwind
+             at /rustc/a9d0a6f15533a364816c4d81e2192009ef601d33/library/std/src/panicking.rs:553:19
+  17: std::panic::catch_unwind
+             at /rustc/a9d0a6f15533a364816c4d81e2192009ef601d33/library/std/src/panic.rs:359:14
+  18: std::rt::lang_start_internal::{{closure}}
+             at /rustc/a9d0a6f15533a364816c4d81e2192009ef601d33/library/std/src/rt.rs:175:24
+  19: std::panicking::catch_unwind::do_call
+             at /rustc/a9d0a6f15533a364816c4d81e2192009ef601d33/library/std/src/panicking.rs:590:40
+  20: std::panicking::catch_unwind
+             at /rustc/a9d0a6f15533a364816c4d81e2192009ef601d33/library/std/src/panicking.rs:553:19
+  21: std::panic::catch_unwind
+             at /rustc/a9d0a6f15533a364816c4d81e2192009ef601d33/library/std/src/panic.rs:359:14
+  22: std::rt::lang_start_internal
+             at /rustc/a9d0a6f15533a364816c4d81e2192009ef601d33/library/std/src/rt.rs:171:5
+  23: main
+  24: __libc_start_call_main
+             at ./csu/../sysdeps/nptl/libc_start_call_main.h:58:16
+  25: __libc_start_main_impl
+             at ./csu/../csu/libc-start.c:360:3
+  26: <unknown>
+   0.078764723s  INFO prepare_target{force=false package_id=shared v0.1.0 (/home/eebop/ostest/shared) target="shared"}: cargo::core::compiler::fingerprint: fingerprint error for shared v0.1.0 (/home/eebop/ostest/shared)/Check { test: false }/TargetInner { name_inferred: true, ..: lib_target("shared", ["lib"], "/home/eebop/ostest/shared/src/lib.rs", Edition2024) }
+   0.078775002s  INFO prepare_target{force=false package_id=shared v0.1.0 (/home/eebop/ostest/shared) target="shared"}: cargo::core::compiler::fingerprint:     err: failed to read `/home/eebop/ostest/modules/start_process/target/debug/.fingerprint/shared-822a2537cdd89b61/lib-shared`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: cargo_util::paths::read_bytes
+   1: cargo_util::paths::read
+   2: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   3: cargo::core::compiler::fingerprint::prepare_target
+   4: cargo::core::compiler::compile
+   5: cargo::core::compiler::compile
+   6: <cargo::core::compiler::build_runner::BuildRunner>::compile
+   7: cargo::ops::cargo_compile::compile_ws
+   8: cargo::ops::cargo_compile::compile_with_exec
+   9: cargo::ops::cargo_compile::compile
+  10: cargo::commands::check::exec
+  11: <cargo::cli::Exec>::exec
+  12: cargo::main
+  13: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  14: std::rt::lang_start::<()>::{closure#0}
+  15: core::ops::function::impls::<impl core::ops::function::FnOnce<A> for &F>::call_once
+             at /rustc/a9d0a6f15533a364816c4d81e2192009ef601d33/library/core/src/ops/function.rs:287:21
+  16: std::panicking::catch_unwind::do_call
+             at /rustc/a9d0a6f15533a364816c4d81e2192009ef601d33/library/std/src/panicking.rs:590:40
+  17: std::panicking::catch_unwind
+             at /rustc/a9d0a6f15533a364816c4d81e2192009ef601d33/library/std/src/panicking.rs:553:19
+  18: std::panic::catch_unwind
+             at /rustc/a9d0a6f15533a364816c4d81e2192009ef601d33/library/std/src/panic.rs:359:14
+  19: std::rt::lang_start_internal::{{closure}}
+             at /rustc/a9d0a6f15533a364816c4d81e2192009ef601d33/library/std/src/rt.rs:175:24
+  20: std::panicking::catch_unwind::do_call
+             at /rustc/a9d0a6f15533a364816c4d81e2192009ef601d33/library/std/src/panicking.rs:590:40
+  21: std::panicking::catch_unwind
+             at /rustc/a9d0a6f15533a364816c4d81e2192009ef601d33/library/std/src/panicking.rs:553:19
+  22: std::panic::catch_unwind
+             at /rustc/a9d0a6f15533a364816c4d81e2192009ef601d33/library/std/src/panic.rs:359:14
+  23: std::rt::lang_start_internal
+             at /rustc/a9d0a6f15533a364816c4d81e2192009ef601d33/library/std/src/rt.rs:171:5
+  24: main
+  25: __libc_start_call_main
+             at ./csu/../sysdeps/nptl/libc_start_call_main.h:58:16
+  26: __libc_start_main_impl
+             at ./csu/../csu/libc-start.c:360:3
+  27: <unknown>
+    Checking shared v0.1.0 (/home/eebop/ostest/shared)
+    Checking start_process v0.1.0 (/home/eebop/ostest/modules/start_process)
+error: could not compile `start_process` (bin "start_process" test) due to 1 previous error; 2 warnings emitted
+warning: build failed, waiting for other jobs to finish...

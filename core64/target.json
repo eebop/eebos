@@ -5,6 +5,7 @@
 	"target-endian": "little",
 	"target-pointer-width": 32,
 	"target-c-int-width": 32,
+	"singlethread": true,
 	"os": "none",
 	"arch": "x86",
 		"linker-flavor": "ld",

@@ -12,6 +12,7 @@ use core::alloc::GlobalAlloc;
 use shared::ports::{io_wait, in8, out8};
 use shared::{make_syscall, NewSysCall, State, SysCallData};
 
+
 #[derive(Clone, Copy)]
 enum PicPort {
     Pic1Cmd = 0x20,
@@ -53,7 +54,7 @@ static EMPTY_ALLOCATOR: EmptyAllocator = EmptyAllocator;
 #[unsafe(no_mangle)]
 pub extern "C" fn main() {
     let mut s = shared::screen::Screen {line: 0, row: 0};
-    let data = NewSysCall::Request(0x20, clock);
+    let data = NewSysCall { channel: 0x20, ptr:  clock };
     make_syscall::<NewSysCall, (), 0x30>(data);
     s.clear_screen();
     writeln!(&mut s, "here now");
