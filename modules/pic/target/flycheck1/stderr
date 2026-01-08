@@ -1,5 +1,8 @@
-   0.010196665s  INFO prepare_target{force=false package_id=pic v0.1.0 (/home/eebop/ostest/modules/pic) target="pic"}: cargo::core::compiler::fingerprint: fingerprint error for pic v0.1.0 (/home/eebop/ostest/modules/pic)/Check { test: true }/TargetInner { name: "pic", doc: true, ..: with_path("/home/eebop/ostest/modules/pic/src/main.rs", Edition2024) }
-   0.010231059s  INFO prepare_target{force=false package_id=pic v0.1.0 (/home/eebop/ostest/modules/pic) target="pic"}: cargo::core::compiler::fingerprint:     err: failed to read `/home/eebop/ostest/modules/pic/target/debug/.fingerprint/pic-f8628fce44a87bc2/test-bin-pic`
+   0.009208153s  INFO prepare_target{force=false package_id=pic v0.1.0 (/home/eebop/ostest/modules/pic) target="pic"}: cargo::core::compiler::fingerprint: stale: changed "/home/eebop/ostest/shared/src/process.rs"
+   0.009218914s  INFO prepare_target{force=false package_id=pic v0.1.0 (/home/eebop/ostest/modules/pic) target="pic"}: cargo::core::compiler::fingerprint:           (vs) "/home/eebop/ostest/modules/pic/target/debug/.fingerprint/shared-33d034a9c3731aa7/dep-lib-shared"
+   0.009221829s  INFO prepare_target{force=false package_id=pic v0.1.0 (/home/eebop/ostest/modules/pic) target="pic"}: cargo::core::compiler::fingerprint:                FileTime { seconds: 1767665724, nanos: 679442194 } < FileTime { seconds: 1767847514, nanos: 294209608 }
+   0.009255392s  INFO prepare_target{force=false package_id=pic v0.1.0 (/home/eebop/ostest/modules/pic) target="pic"}: cargo::core::compiler::fingerprint: fingerprint error for pic v0.1.0 (/home/eebop/ostest/modules/pic)/Check { test: true }/TargetInner { name: "pic", doc: true, ..: with_path("/home/eebop/ostest/modules/pic/src/main.rs", Edition2024) }
+   0.009262446s  INFO prepare_target{force=false package_id=pic v0.1.0 (/home/eebop/ostest/modules/pic) target="pic"}: cargo::core::compiler::fingerprint:     err: failed to read `/home/eebop/ostest/modules/pic/target/debug/.fingerprint/pic-f8628fce44a87bc2/test-bin-pic`
 
 Caused by:
     No such file or directory (os error 2)
@@ -43,51 +46,16 @@ Stack backtrace:
   25: __libc_start_main_impl
              at ./csu/../csu/libc-start.c:360:3
   26: <unknown>
-   0.074939665s  INFO prepare_target{force=false package_id=pic v0.1.0 (/home/eebop/ostest/modules/pic) target="pic"}: cargo::core::compiler::fingerprint: fingerprint error for pic v0.1.0 (/home/eebop/ostest/modules/pic)/Check { test: false }/TargetInner { name: "pic", doc: true, ..: with_path("/home/eebop/ostest/modules/pic/src/main.rs", Edition2024) }
-   0.074956046s  INFO prepare_target{force=false package_id=pic v0.1.0 (/home/eebop/ostest/modules/pic) target="pic"}: cargo::core::compiler::fingerprint:     err: failed to read `/home/eebop/ostest/modules/pic/target/debug/.fingerprint/pic-40cfc6343842b47b/bin-pic`
-
-Caused by:
-    No such file or directory (os error 2)
-
-Stack backtrace:
-   0: cargo_util::paths::read_bytes
-   1: cargo_util::paths::read
-   2: cargo::core::compiler::fingerprint::_compare_old_fingerprint
-   3: cargo::core::compiler::fingerprint::prepare_target
-   4: cargo::core::compiler::compile
-   5: <cargo::core::compiler::build_runner::BuildRunner>::compile
-   6: cargo::ops::cargo_compile::compile_ws
-   7: cargo::ops::cargo_compile::compile_with_exec
-   8: cargo::ops::cargo_compile::compile
-   9: cargo::commands::check::exec
-  10: <cargo::cli::Exec>::exec
-  11: cargo::main
-  12: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
-  13: std::rt::lang_start::<()>::{closure#0}
-  14: core::ops::function::impls::<impl core::ops::function::FnOnce<A> for &F>::call_once
-             at /rustc/a9d0a6f15533a364816c4d81e2192009ef601d33/library/core/src/ops/function.rs:287:21
-  15: std::panicking::catch_unwind::do_call
-             at /rustc/a9d0a6f15533a364816c4d81e2192009ef601d33/library/std/src/panicking.rs:590:40
-  16: std::panicking::catch_unwind
-             at /rustc/a9d0a6f15533a364816c4d81e2192009ef601d33/library/std/src/panicking.rs:553:19
-  17: std::panic::catch_unwind
-             at /rustc/a9d0a6f15533a364816c4d81e2192009ef601d33/library/std/src/panic.rs:359:14
-  18: std::rt::lang_start_internal::{{closure}}
-             at /rustc/a9d0a6f15533a364816c4d81e2192009ef601d33/library/std/src/rt.rs:175:24
-  19: std::panicking::catch_unwind::do_call
-             at /rustc/a9d0a6f15533a364816c4d81e2192009ef601d33/library/std/src/panicking.rs:590:40
-  20: std::panicking::catch_unwind
-             at /rustc/a9d0a6f15533a364816c4d81e2192009ef601d33/library/std/src/panicking.rs:553:19
-  21: std::panic::catch_unwind
-             at /rustc/a9d0a6f15533a364816c4d81e2192009ef601d33/library/std/src/panic.rs:359:14
-  22: std::rt::lang_start_internal
-             at /rustc/a9d0a6f15533a364816c4d81e2192009ef601d33/library/std/src/rt.rs:171:5
-  23: main
-  24: __libc_start_call_main
-             at ./csu/../sysdeps/nptl/libc_start_call_main.h:58:16
-  25: __libc_start_main_impl
-             at ./csu/../csu/libc-start.c:360:3
-  26: <unknown>
-    Checking pic v0.1.0 (/home/eebop/ostest/modules/pic)
-error: could not compile `pic` (bin "pic" test) due to 1 previous error
+   0.065209532s  INFO prepare_target{force=false package_id=shared v0.1.0 (/home/eebop/ostest/shared) target="shared"}: cargo::core::compiler::fingerprint: fingerprint dirty for shared v0.1.0 (/home/eebop/ostest/shared)/Check { test: false }/TargetInner { name_inferred: true, ..: lib_target("shared", ["lib"], "/home/eebop/ostest/shared/src/lib.rs", Edition2024) }
+   0.065230101s  INFO prepare_target{force=false package_id=shared v0.1.0 (/home/eebop/ostest/shared) target="shared"}: cargo::core::compiler::fingerprint:     dirty: FsStatusOutdated(StaleItem(ChangedFile { reference: "/home/eebop/ostest/modules/pic/target/debug/.fingerprint/shared-33d034a9c3731aa7/dep-lib-shared", reference_mtime: FileTime { seconds: 1767665724, nanos: 679442194 }, stale: "/home/eebop/ostest/shared/src/process.rs", stale_mtime: FileTime { seconds: 1767847514, nanos: 294209608 } }))
+   0.065439185s  INFO prepare_target{force=false package_id=pic v0.1.0 (/home/eebop/ostest/modules/pic) target="pic"}: cargo::core::compiler::fingerprint: stale: changed "/home/eebop/ostest/shared/src/process.rs"
+   0.065444215s  INFO prepare_target{force=false package_id=pic v0.1.0 (/home/eebop/ostest/modules/pic) target="pic"}: cargo::core::compiler::fingerprint:           (vs) "/home/eebop/ostest/modules/pic/target/debug/.fingerprint/shared-822a2537cdd89b61/dep-lib-shared"
+   0.065448012s  INFO prepare_target{force=false package_id=pic v0.1.0 (/home/eebop/ostest/modules/pic) target="pic"}: cargo::core::compiler::fingerprint:                FileTime { seconds: 1767665724, nanos: 682442208 } < FileTime { seconds: 1767847514, nanos: 294209608 }
+   0.065488588s  INFO prepare_target{force=false package_id=pic v0.1.0 (/home/eebop/ostest/modules/pic) target="pic"}: cargo::core::compiler::fingerprint: fingerprint dirty for pic v0.1.0 (/home/eebop/ostest/modules/pic)/Check { test: false }/TargetInner { name: "pic", doc: true, ..: with_path("/home/eebop/ostest/modules/pic/src/main.rs", Edition2024) }
+   0.065495361s  INFO prepare_target{force=false package_id=pic v0.1.0 (/home/eebop/ostest/modules/pic) target="pic"}: cargo::core::compiler::fingerprint:     dirty: FsStatusOutdated(StaleDepFingerprint { name: "shared" })
+   0.065584449s  INFO prepare_target{force=false package_id=shared v0.1.0 (/home/eebop/ostest/shared) target="shared"}: cargo::core::compiler::fingerprint: fingerprint dirty for shared v0.1.0 (/home/eebop/ostest/shared)/Check { test: false }/TargetInner { name_inferred: true, ..: lib_target("shared", ["lib"], "/home/eebop/ostest/shared/src/lib.rs", Edition2024) }
+   0.065590570s  INFO prepare_target{force=false package_id=shared v0.1.0 (/home/eebop/ostest/shared) target="shared"}: cargo::core::compiler::fingerprint:     dirty: FsStatusOutdated(StaleItem(ChangedFile { reference: "/home/eebop/ostest/modules/pic/target/debug/.fingerprint/shared-822a2537cdd89b61/dep-lib-shared", reference_mtime: FileTime { seconds: 1767665724, nanos: 682442208 }, stale: "/home/eebop/ostest/shared/src/process.rs", stale_mtime: FileTime { seconds: 1767847514, nanos: 294209608 } }))
+    Checking shared v0.1.0 (/home/eebop/ostest/shared)
+error: could not compile `shared` (lib) due to 6 previous errors
 warning: build failed, waiting for other jobs to finish...
+error: could not compile `shared` (lib) due to 6 previous errors

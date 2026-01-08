@@ -54,11 +54,11 @@ static EMPTY_ALLOCATOR: EmptyAllocator = EmptyAllocator;
 #[unsafe(no_mangle)]
 pub extern "C" fn main() {
     let mut s = shared::screen::Screen {line: 0, row: 0};
-    let data = NewSysCall { channel: 0x20, ptr:  clock };
-    make_syscall::<NewSysCall, (), 0x30>(data);
+    // let data = NewSysCall { channel: 0x20, ptr:  clock };
+    // make_syscall::<NewSysCall, (), 0x30>(data);
     s.clear_screen();
     writeln!(&mut s, "here now");
-    enable(0);
+    // enable(0);
     loop {}
 }
 

@@ -206,7 +206,7 @@ pub extern "C" fn rustmain(mem: *mut u8) {
 
     
 
-    let code = unsafe { slice::from_mut_ptr_range(elf_data!(pic)) };
+    let code = unsafe { slice::from_mut_ptr_range(elf_data!(start_process)) };
     let mut pic = load_elf::<Global>(code);
         
     // STATE.processes.borrow_mut().push(pic);
@@ -214,12 +214,11 @@ pub extern "C" fn rustmain(mem: *mut u8) {
     // STATE.currentProcess.replace(Some(0));
 
 
-    // {    
-    //     let mut ptr = STATE.interrupts.borrow_mut();
-    //     ptr[0x30] = shared::Syscall::Request(syscall::submit_syscall, 0);
-    //     ptr[0xfe] = shared::Syscall::Request(load_syscall, 0);
-    //     drop(ptr);
-    // };
+    {    
+        let mut ptr = STATE.interrupts.borrow_mut();
+        ptr[0x30] = shared::Syscall::Request(syscall::submit_syscall);
+        ptr[0xfe] = shared::Syscall::Request(load_syscall);
+    };
 
     // // SAFETY: we will not aquire another borrow of processes
     // // We must do this because making a syscall doesn't drop anything

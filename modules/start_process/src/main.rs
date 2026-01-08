@@ -37,7 +37,9 @@ fn panic<'a, 'b>(p: &'a PanicInfo<'b>) -> ! {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn __libc_start_main() {
+pub extern "C" fn __libc_start_main() -> ! {
+    main();
+    loop {}
 }
 
 struct EmptyAllocator;
@@ -68,21 +70,23 @@ fn exit(mut curr: SysCallData, state: &State) {
     unsafe { *RET_STATE.get() = None }
 }
 
-// fn do_init_mod(name: String) -> Process {
-//     // First, load the mod into memory
-//     let proc = make_syscall::<String, Process, 0xfe>(name);
-//     // Then, fire enter(). It'll have to call exit()
-//     make_syscall::<Process, (), 0x40>(proc);
+fn do_init_mod(name: String) {
+    // First, load the mod into memory
+    let proc = make_syscall::<String, Process<DummyAllocator, Global>, 0xfe>(name);
+    // Then, fire enter(). It'll have to call exit()
+    make_syscall::<Process<DummyAllocator, Global>, (), 0x40>(proc);
     
-//     proc
-// }
+    proc
+}
 
 #[unsafe(no_mangle)]
 pub extern "C" fn main() {
     let mut s = Screen { line: 0, row: 0};
-    writeln!(&mut s, "test_here");
-    loop {}
 
     make_syscall::<_, (), 0x30>(NewSysCall {channel: 0x40, ptr: enter});
     make_syscall::<_, (), 0x30>(NewSysCall {channel: 0x41, ptr: exit});
+
+    writeln!(&mut s, "test_here");
+    loop {}
+
 }

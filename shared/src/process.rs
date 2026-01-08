@@ -4,7 +4,9 @@ use alloc::vec;
 use alloc::vec::{Vec};
 use core::ops::{Deref, DerefMut, Index, IndexMut};
 use core::arch::asm;
-
+use core::cell::RefCell;
+use alloc::rc::Rc;
+use core::pin::Pin;
 
 unsafe extern "C" {
     static mut stored_sp: u32;
@@ -13,6 +15,8 @@ unsafe extern "C" {
 
 #[repr(C, align(0x1000))]
 pub struct Page([u8; 0x1000]);
+
+impl !Unpin for Page {} // TODO: once paging is up, only a process's view is pinned
 
 impl Deref for Page {
     type Target = [u8; 0x1000];
@@ -51,8 +55,8 @@ impl<'a> PageAligned<'a> for &'a mut [Page] {
 pub struct Process<A: Allocator + Clone, B: Allocator + Clone> {
     pub got_ptr: *mut [u8],
     pub _start: extern "C" fn() -> !,
-    pub owned_data: Vec<Box<[Page], A>, A>,
-    pub stacks: Option<Vec<Box<[Page], B>, B>> // Option is necessary because sometimes we can't even alloc 0-sized
+    pub owned_data: Rc<RefCell<[Pin<Box<[Page], A>>]>, A>,
+    pub stacks:     Rc<RefCell<Vec<Box<[Page], B>, B>>, B>
 }
 
 impl<A: Allocator + Clone, B: Allocator + Clone> Process<A, B> {

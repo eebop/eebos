@@ -26,22 +26,22 @@ pub static STATE: State = State::new();
 // }
 
 
-// Drop the stack, 
-fn exit(mut curr: SysCallData, state: &State) {
-	match state.saves.borrow_mut().pop() {
-		Some(s) => {
-			*curr = s.0;
-			STATE.currentProcess.replace(Some(s.1));
-		},
-		None => {loop {}}, // The OS has nothing to do. Spinloop until an interrupt
-	}
-}
+// // Drop the stack, 
+// fn exit(mut curr: SysCallData, state: &State) {
+// 	match state.saves.borrow_mut().pop() {
+// 		Some(s) => {
+// 			*curr = s.0;
+// 			STATE.currentProcess.replace(Some(s.1));
+// 		},
+// 		None => {loop {}}, // The OS has nothing to do. Spinloop until an interrupt
+// 	}
+// }
 
 pub fn submit_syscall(mut curr: SysCallData, state: &State) {
 	let syscall = curr.receive_abi::<shared::NewSysCall>();
 
 	
-	state.interrupts.borrow_mut()[syscall.channel as usize] = Syscall::Request(syscall.ptr, state.currentProcess.borrow().unwrap().clone());
+	state.interrupts.borrow_mut()[syscall.channel as usize] = Syscall::Request(syscall.ptr);
 }
 
 #[unsafe(no_mangle)]
@@ -53,13 +53,10 @@ extern "C" fn isr_handler(regs: *mut SysCallInternal) {
 	drop(int);
 
 	let mut s = Screen::new();
-
-	writeln!(&mut s, "got: {:#?}, regs = {:#?}", val, *regs);
-
 	
 
 	match val {
-		Syscall::Request(f, process) => {
+		Syscall::Request(f) => {
 			f(regs, &STATE);
 			return;
 		},

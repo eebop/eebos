@@ -92,7 +92,6 @@ $(builddir)/mods/%.o: modules/%/target/i686-unknown-linux-gnu/release/%
 	mkdir -p build/mods
 	cp modules/$*/target/i686-unknown-linux-gnu/release/$* $*
 	i686-elf-objcopy -I binary -O elf32-i386 $* $@
-	mv $* $(builddir)/mods/$*
 
 makefile.deps: $(HEADERS) $(CSRC)
 	$(CC) -MM $(CSRC) > makefile.deps

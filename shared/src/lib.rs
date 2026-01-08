@@ -2,6 +2,7 @@
 #![feature(sync_unsafe_cell)]
 #![feature(ptr_as_ref_unchecked)]
 #![feature(allocator_api)]
+#![feature(negative_impls)]
 #![macro_use]
 
 #![allow(unused)]
@@ -109,7 +110,7 @@ impl<'a> SysCallData<'a> {
 pub enum Syscall {
 	// A request claims a mutable lock on the OS state
 	// Used to modify core state
-	Request(fn(SysCallData, &State), usize),
+	Request(fn(SysCallData, &State)),
 	#[default]
 	Empty
 }
@@ -118,7 +119,7 @@ pub struct State {
 	pub screen: RefCell<Screen>,
 	pub interrupts: RefCell<[Syscall; 256]>,
 	pub saves: RefCell<Vec<(SysCallInternal, usize)>>,
-	pub currentProcess: RefCell<Option<usize>>
+	// pub currentProcess: RefCell<Option<usize>>
 }
 
 // Safe as there will only be one processor
@@ -130,7 +131,7 @@ impl State {
 			screen: RefCell::new(Screen {line: 0, row: 0}),
 			interrupts: RefCell::new([Syscall::Empty; 256]),
 			saves: RefCell::new(Vec::new()),
-			currentProcess: RefCell::new(None)
+			// currentProcess: RefCell::new(None)
 		}
 	}
 }
