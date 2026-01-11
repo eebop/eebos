@@ -6,7 +6,7 @@ RSC = rustc
 CFLAGS = -std=gnu23 -ffreestanding -Wall -Wextra -O2
 RSFLAGS = -O --crate-type=bin --emit=obj --target=i686-unknown-linux-gnu -C panic=abort -C lto=true -C code-model=small -C no-redzone=true
 
-QEMUFLAGS = -no-reboot -no-shutdown #-d cpu_reset,int
+QEMUFLAGS = -no-reboot -no-shutdown -debugcon stdio#-d cpu_reset,int
 
 # all filenames to build, minus extension
 srcs = boot kernel stdutils gdt pic ports irq page64 core64 sse

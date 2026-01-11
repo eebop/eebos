@@ -1,6 +1,8 @@
 #![no_std]
 #![no_main]
 
+#![feature(never_type)]
+
 use core::panic::PanicInfo;
 
 use core::*;
@@ -33,6 +35,7 @@ fn panic<'a, 'b>(p: &'a PanicInfo<'b>) -> ! {
 #[unsafe(no_mangle)]
 pub extern "C" fn __libc_start_main() {
     main();
+    make_syscall::<(), !, 0x41>(()); // exit
 }
 
 struct EmptyAllocator;
@@ -59,7 +62,7 @@ pub extern "C" fn main() {
     s.clear_screen();
     writeln!(&mut s, "here now");
     // enable(0);
-    loop {}
+    // loop {}
 }
 
 fn get_state() -> u16 {

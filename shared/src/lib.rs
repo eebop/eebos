@@ -29,6 +29,7 @@ use crate::process::Process;
 // User side api
 pub fn make_syscall<T, U, const CHANNEL: u8>(mut data: T) -> U {
 	let mut out: MaybeUninit<U> = MaybeUninit::uninit();
+	// TODO: this will be more complicated with paging, as we can't just pass pointers
 	unsafe { asm! (
 		"mov eax, esp", // Rust garentees that there is no redzone
 		"int {0}",

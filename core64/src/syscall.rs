@@ -37,12 +37,12 @@ pub static STATE: State = State::new();
 // 	}
 // }
 
-pub fn submit_syscall(mut curr: SysCallData, state: &State) {
-	let syscall = curr.receive_abi::<shared::NewSysCall>();
+// pub fn submit_syscall(mut curr: SysCallData, state: &State) {
+// 	let syscall: NewSysCall = curr.receive_abi::<shared::NewSysCall>();
 
 	
-	state.interrupts.borrow_mut()[syscall.channel as usize] = Syscall::Request(syscall.ptr);
-}
+// 	state.interrupts.borrow_mut()[syscall.channel as usize] = Syscall::Request(syscall.ptr);
+// }
 
 #[unsafe(no_mangle)]
 extern "C" fn isr_handler(regs: *mut SysCallInternal) {
@@ -54,6 +54,7 @@ extern "C" fn isr_handler(regs: *mut SysCallInternal) {
 
 	let mut s = Screen::new();
 	
+	writeln!(&mut s, "in interrupt... {:#x?}", *regs);
 
 	match val {
 		Syscall::Request(f) => {

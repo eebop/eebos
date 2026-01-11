@@ -1,6 +1,10 @@
-use core::{cell::SyncUnsafeCell, mem::MaybeUninit};
+use core::{alloc::GlobalAlloc, cell::SyncUnsafeCell, mem::MaybeUninit};
 
 use alloc::alloc::Allocator;
+use core::alloc::Layout;
+use core::fmt::Write;
+
+use crate::{make_syscall, screen::Screen};
 
 pub struct ManualOnceCell<T> {
     inner: SyncUnsafeCell<MaybeUninit<T>>
@@ -21,7 +25,7 @@ impl<T> ManualOnceCell<T> {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct DummyAllocator;
 
 unsafe impl Allocator for DummyAllocator {
@@ -31,5 +35,30 @@ unsafe impl Allocator for DummyAllocator {
 
     unsafe fn deallocate(&self, _: core::ptr::NonNull<u8>, _: core::alloc::Layout) {
         panic!("deallocate() attempt in dummy allocator");
+    }
+}
+
+pub struct KernelAllocator;
+
+unsafe impl GlobalAlloc for KernelAllocator {
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        writeln!(Screen::new(), "making alloc attempt...");
+        make_syscall::<Layout, *mut u8, 0x50>(layout)
+    }
+
+    unsafe fn dealloc(&self, ptr: *mut u8, layout: core::alloc::Layout) {
+        // No dealloc in kernel yet, so just pass
+    }
+}
+
+struct EmptyAllocator;
+
+unsafe impl GlobalAlloc for EmptyAllocator {
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        panic!("Alloc not supported here!");
+    }
+
+    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        panic!("Alloc not supported here!");
     }
 }

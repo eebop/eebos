@@ -1,6 +1,8 @@
 use core::fmt;
 use core::slice;
 
+use crate::ports::out8;
+
 pub struct Screen {
     pub line: usize,
     pub row: usize
@@ -30,25 +32,30 @@ impl Screen {
             if self.line == 25 {
                 self.line = 0;
             }
-            return;
-        }
+        } else {
 
-        screen[self.coord()] = (screen[self.coord()] & 0xFF00) | (c as u16);
+            screen[self.coord()] = (screen[self.coord()] & 0xFF00) | (c as u16);
 
-        self.row += 1;
-        if self.row == 80 {
-            self.row = 0;
-            self.line += 1;
-            if self.line == 25 {
-                self.line = 0;
+            self.row += 1;
+            if self.row == 80 {
+                self.row = 0;
+                self.line += 1;
+                if self.line == 25 {
+                    self.line = 0;
+                }
             }
         }
+        out8(0xe9, c);
+
+
     }
 
     pub fn clear_screen(&mut self) {
-        for _ in 0..(25 * 80) {
-            self.write_byte(b' ');
-        }
+        let screen: &mut [u16] = unsafe {
+            slice::from_raw_parts_mut(0xB8000 as *mut u16, 25 * 80)
+        };
+        // TODO: if there's color, we need to reset it
+        screen.fill((screen[0] & 0xFF00) | (b' ' as u16));
     }
 
 }

@@ -7,6 +7,8 @@ use core::arch::asm;
 use core::cell::RefCell;
 use alloc::rc::Rc;
 use core::pin::Pin;
+use core::fmt::Debug;
+
 
 unsafe extern "C" {
     static mut stored_sp: u32;
@@ -16,7 +18,11 @@ unsafe extern "C" {
 #[repr(C, align(0x1000))]
 pub struct Page([u8; 0x1000]);
 
-impl !Unpin for Page {} // TODO: once paging is up, only a process's view is pinned
+impl Debug for Page {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_tuple("Page").finish()
+    }
+}
 
 impl Deref for Page {
     type Target = [u8; 0x1000];
@@ -52,48 +58,55 @@ impl<'a> PageAligned<'a> for &'a mut [Page] {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct Process<A: Allocator + Clone, B: Allocator + Clone> {
-    pub got_ptr: *mut [u8],
+    pub got_ptr: *mut [u32],
     pub _start: extern "C" fn() -> !,
-    pub owned_data: Rc<RefCell<[Pin<Box<[Page], A>>]>, A>,
-    pub stacks:     Rc<RefCell<Vec<Box<[Page], B>, B>>, B>
+    pub owned_data: Rc<RefCell<[Box<[Page], A>]>, A>,
+    pub stacks: Option<Vec<Rc<RefCell<Box<[Page], B>>, B>, B>>
 }
 
 impl<A: Allocator + Clone, B: Allocator + Clone> Process<A, B> {
-    pub fn empty(a: A) -> Self {
+    pub fn new(got_ptr: *mut [u32], _start: extern "C" fn() -> !, owned_data: Rc<RefCell<[Box<[Page], A>]>, A>) -> Self {
         Self {
-            got_ptr: &mut [][..] as *mut [u8],
-            _start: unsafe { core::mem::transmute(core::ptr::null::<()>()) },
-            owned_data: Vec::new_in(a),
+            got_ptr: got_ptr,
+            _start: _start,
+            owned_data: owned_data,
             stacks: None
         }
     }
-    pub fn new_stack(&mut self, b: B) {
+    pub fn new_stack(&mut self, alloc: B) -> Rc<RefCell<Box<[Page], B>>, B> {
         if let None = self.stacks {
-            self.stacks = Some(Vec::<Box<[Page], B>, B>::with_capacity_in(1, b.clone()));
+            self.stacks = Some(Vec::new_in(alloc.clone()));
         }
 
-        self.stacks.as_mut().unwrap().push(Page::uninit_many(4, b))
+        let data = Rc::new_in(RefCell::new(Page::uninit_many(4, alloc.clone())), alloc.clone());
 
+        self.stacks.as_mut().unwrap().push(data.clone());
+        
+        data
     }
 
     pub fn make_fncall(&mut self, _start: extern "C" fn() -> !, stack_allocator: B) -> ! {
+        let ptr = {
+            // TODO: Initialization is more complex if you have argv that isn't empty
+            let mut stack = self.new_stack(stack_allocator);
+            let mut borrow = stack.borrow_mut();
+            let mut data = borrow.as_contiguous();
 
-        // TODO: Initialization is more complex if you have argv that isn't empty
-        self.new_stack(stack_allocator);
+            let size = data.len();
+            assert!(size == 0x4000);
+            data[size-16..size].fill(0); // this sets up argv, argc, envp. all 0
+            unsafe { data.as_mut_ptr().add(size - 16) }
+        };
 
-        let data = self.stacks.as_deref_mut().unwrap().last_mut().unwrap().as_contiguous();
-
-        let size = data.len();
-        assert!(size == 0x4000);
-        data[size-16..size].fill(0); // this sets up argv, argc, envp. all 0
 
         // ESP must point to the top of our stack
         // EDX should point to the atexit() function (not yet implemented)
         unsafe { asm!(
             "mov esp, {ptr}",
             "call {_start}",
-            ptr = in(reg) data.as_mut_ptr().add(size),
+            ptr = in(reg) ptr,
             _start = in(reg) _start,
             options(noreturn)
         )}
