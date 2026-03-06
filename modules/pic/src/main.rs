@@ -12,7 +12,8 @@ use core::fmt::Write;
 use core::alloc::GlobalAlloc;
 
 use shared::ports::{io_wait, in8, out8};
-use shared::{make_syscall, NewSysCall, State, SysCallData};
+use shared::screen::Screen;
+use shared::{make_syscall, SysCallData};
 
 
 #[derive(Clone, Copy)]
@@ -87,9 +88,8 @@ fn enable(line: u8) {
     out8(port as u16, curr);
 }
 
-pub fn clock(cmd: SysCallData, state: &State) {
-    state.screen.borrow_mut().clear_screen();
-	writeln!(state.screen.borrow_mut(), "Clock!");
+pub fn clock(cmd: SysCallData) {
+	writeln!(Screen::new(), "Clock!");
 	sendEOI(0);
 }
 

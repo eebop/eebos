@@ -38,9 +38,9 @@ unsafe impl Allocator for DummyAllocator {
     }
 }
 
-pub struct KernelAllocator;
+pub struct SimpleAllocator;
 
-unsafe impl GlobalAlloc for KernelAllocator {
+unsafe impl GlobalAlloc for SimpleAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         writeln!(Screen::new(), "making alloc attempt...");
         make_syscall::<Layout, *mut u8, 0x50>(layout)

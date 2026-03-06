@@ -3,6 +3,9 @@ cpu: count=1, ips=10000000, reset_on_triple_fault=0#, start_paused=1
 ata0-slave: type=cdrom, path=build/eebos.iso, status=inserted
 boot: cdrom
 
+# debugger: enabled
+
+
 #mouse: type=ps2, enabled=1
 magic_break: enabled=1
 
@@ -11,7 +14,6 @@ error: action=report
 # info: action=report
 # debug: action=report
 
-# debugger: enabled
 
 
 # display_library: sdl2

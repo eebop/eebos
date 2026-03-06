@@ -2,7 +2,7 @@ use alloc::alloc::Allocator;
 use alloc::boxed::Box;
 use alloc::vec;
 use alloc::vec::{Vec};
-use core::ops::{Deref, DerefMut, Index, IndexMut};
+use core::ops::{Deref, DerefMut, Index, IndexMut, Range};
 use core::arch::asm;
 use core::cell::RefCell;
 use alloc::rc::Rc;
@@ -15,6 +15,7 @@ unsafe extern "C" {
     static mut stack_top: u8;
 }
 
+#[derive(Clone, Copy)]
 #[repr(C, align(0x1000))]
 pub struct Page([u8; 0x1000]);
 
@@ -63,28 +64,32 @@ pub struct Process<A: Allocator + Clone, B: Allocator + Clone> {
     pub got_ptr: *mut [u32],
     pub _start: extern "C" fn() -> !,
     pub owned_data: Rc<RefCell<[Box<[Page], A>]>, A>,
-    pub stacks: Option<Vec<Rc<RefCell<Box<[Page], B>>, B>, B>>
+    pub stacks: Vec<Rc<RefCell<Box<[Page], B>>, B>, B>
 }
 
 impl<A: Allocator + Clone, B: Allocator + Clone> Process<A, B> {
-    pub fn new(got_ptr: *mut [u32], _start: extern "C" fn() -> !, owned_data: Rc<RefCell<[Box<[Page], A>]>, A>) -> Self {
+    pub fn new(got_ptr: *mut [u32], _start: extern "C" fn() -> !, owned_data: Rc<RefCell<[Box<[Page], A>]>, A>, b: B) -> Self {
         Self {
             got_ptr: got_ptr,
             _start: _start,
             owned_data: owned_data,
-            stacks: None
+            stacks: Vec::new_in(b)
         }
     }
     pub fn new_stack(&mut self, alloc: B) -> Rc<RefCell<Box<[Page], B>>, B> {
-        if let None = self.stacks {
-            self.stacks = Some(Vec::new_in(alloc.clone()));
-        }
 
         let data = Rc::new_in(RefCell::new(Page::uninit_many(4, alloc.clone())), alloc.clone());
 
-        self.stacks.as_mut().unwrap().push(data.clone());
+        self.stacks.push(data.clone());
         
         data
+    }
+
+    pub fn try_own_none<C: Allocator + Clone>(self, alloc: C) -> Result<Process<A, C>, Process<A, B>> {
+        let 0 = self.stacks.len() else {
+            return Err(self);
+        };
+        Ok(Process { got_ptr: self.got_ptr, _start: self._start, owned_data: self.owned_data, stacks: Vec::new_in(alloc) })
     }
 
     pub fn make_fncall(&mut self, _start: extern "C" fn() -> !, stack_allocator: B) -> ! {

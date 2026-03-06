@@ -225,10 +225,13 @@ void kernel_main(void)
     //     : "rax"
     // );
 
+	uint8_t* ptr = malloc(0);
+	printf("ptr is %x\n", ptr);
+
+	rustmain(ptr);
+
 	int x = 10;
 	int o = 5;
-
-	rustmain(malloc(0));
 
 	asm("push %[x]\n"
 		"mov $3, %%ebx\n"

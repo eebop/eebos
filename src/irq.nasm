@@ -13,10 +13,10 @@ isr_%+%1: ; we just came in from a int
     mov esp, 0
     xchg [stored_sp], esp
     test esp, esp
-    jnz stack_configured_%+%1
+    jnz %%stack_configured
     mov esp, eax ; switch to kernel stack if not already on it
 
-stack_configured_%+%1:
+%%stack_configured:
     
     push DWORD [eax + 0xc]
     push DWORD [eax + 0x8]
