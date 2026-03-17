@@ -11,7 +11,7 @@ QEMUFLAGS = -no-reboot -no-shutdown -debugcon stdio #-d cpu_reset,int
 # all filenames to build, minus extension
 srcs = boot kernel stdutils gdt pic ports irq page64 core64 sse
 
-modules = test_mod test_dep paging dyshared#start_process pic
+modules = test_mod test_dep paging process dyshared#start_process pic
 
 libmod = shared
 
@@ -75,7 +75,7 @@ $(builddir)/%.o: $(srcdir)/%.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) $< -c -o $@
 
 core64/target/target/release/deps: core64/src/*.rs $(libmod)/src/*.rs
-	cd core64 ; cargo rustc --release --target=target.json -Z build-std=core,compiler_builtins,alloc -Z build-std-features=compiler-builtins-mem -- --emit=obj
+	cd core64 ; cargo rustc --release -Zjson-target-spec --target=target.json -Z build-std=core,compiler_builtins,alloc -Z build-std-features=compiler-builtins-mem -- --emit=obj
 
 
 $(builddir)/core64.o: core64/target/target/release/deps
@@ -90,7 +90,7 @@ $(builddir)/core64.o: core64/target/target/release/deps
 
 $(builddir)/mods/test_mod.so: modules/test_mod/src/lib.rs modules/*/src/*.rs
 	@mkdir -p build/mods
-	cd modules/test_mod; RUSTFLAGS= cargo rustc --release --target=i686-unknown-linux-gnu -Z build-std=core,compiler_builtins,alloc -Z build-std-features=compiler-builtins-mem
+	cd modules/test_mod; RUSTFLAGS="-Cno-redzone=true" cargo build --release --target=i686-unknown-linux-gnu -Z build-std=core,compiler_builtins,alloc -Z build-std-features=compiler-builtins-mem
 
 	cp modules/test_mod/target/i686-unknown-linux-gnu/release/libtest_mod.so $@
 

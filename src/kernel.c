@@ -199,11 +199,13 @@ void kernel_main(void)
 	// init_pages();
 
 	printf("lgdt2\n");
+	uint8_t* ptr = malloc(0);
+	printf("ptr is %x\n", ptr);
 
-    // asm volatile (
+    asm volatile (
     //     ".global main64\n"
 	// 	".global rustmain\n"
-	// 	"xchgw %%bx, %%bx\n"
+		"xchgw %bx, %bx\n"
 
 
     //     "jmp $0x18, $main64\n"
@@ -223,10 +225,8 @@ void kernel_main(void)
     //     //     [cs] "g" (cs)
     //         // [rip] "g" (rip)
     //     : "rax"
-    // );
+    );
 
-	uint8_t* ptr = malloc(0);
-	printf("ptr is %x\n", ptr);
 
 	rustmain(ptr);
 

@@ -1,5 +1,6 @@
 #![no_std]
 #![feature(allocator_api)]
+#![feature(trait_alias)]
 
 extern crate alloc;
 
@@ -8,7 +9,7 @@ pub mod screen;
 
 use core::{alloc::{Allocator, GlobalAlloc, Layout}, fmt::Debug, ops::{Deref, DerefMut}, panic::PanicInfo};
 
-use alloc::boxed::Box;
+use alloc::{alloc::AllocError, boxed::Box};
 
 use crate::screen::Screen;
 
@@ -16,10 +17,11 @@ use core::fmt::Write;
 
 #[panic_handler]
 fn panic<'a, 'b>(pi: &'a PanicInfo<'b>) -> ! {
-    writeln!(Screen::new(), "panic!");
     writeln!(Screen::new(), "{}", pi);
     loop {}
 }
+
+pub trait CAllocator = Allocator + Clone + Debug;
 
 struct EmptyAllocator;
 
@@ -60,11 +62,20 @@ impl DerefMut for Page {
 }
 
 impl Page {
-	pub fn uninit_box<A: Allocator>(a: A) -> Box<Self, A> {
-		unsafe { Box::new_uninit_in(a).assume_init() }
-	}
+    pub fn try_uninit_box<A: Allocator>(a: A) -> Result<Box<Self, A>, AllocError> {
+        Ok(unsafe { Box::try_new_uninit_in(a)?.assume_init() })
+    }
+
+    pub fn uninit_box<A: Allocator>(a: A) -> Box<Self, A> {
+        Self::try_uninit_box(a).unwrap()
+    }
+
+    pub fn try_uninit_many<A: Allocator>(size: usize, a: A) -> Result<Box<[Self], A>, AllocError> {
+        Ok(unsafe { Box::try_new_uninit_slice_in(size, a)?.assume_init()})
+    }
+
     pub fn uninit_many<A: Allocator>(size: usize, a: A) -> Box<[Self], A> {
-        unsafe { Box::new_uninit_slice_in(size, a).assume_init() }
+        Self::try_uninit_many(size, a).unwrap()
     }
 }
 
@@ -78,4 +89,8 @@ impl<'a> PageAligned<'a> for &'a mut [Page] {
             core::slice::from_raw_parts_mut(&raw mut self[0].0[0], 0x1000 * self.len())
         }
     }
+}
+
+pub fn bochsdbg() {
+	unsafe { core::arch::asm!("xchg bx, bx") };
 }

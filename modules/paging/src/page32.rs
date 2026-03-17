@@ -3,16 +3,35 @@ extern crate dyshared;
 use alloc::{alloc::{AllocError, Allocator, Global}, boxed::Box, rc::Rc};
 
 // use rangemap::{RangeInclusiveMap, RangeMap, StepFns};
-use dyshared::{Page, screen::Screen};
+use dyshared::{CAllocator, Page, screen::Screen};
 use static_assertions::const_assert;
-use core::{alloc::Layout, cell::{Cell, RefCell}, fmt::{Debug, Formatter}, num::NonZero, pin::Pin, ptr::NonNull};
-use crate::{AllocationStrategy, PageMap, PageToken, PageType, Permission};
+use core::{alloc::Layout, cell::{Cell, RefCell}, error::Error, fmt::{Debug, Display, Formatter}, num::NonZero, pin::Pin, ptr::NonNull};
+use crate::{MappedPageAllocator, PageMap, PageToken, PageType, Permission, TransToPhys};
 use core::arch::asm;
 use core::fmt::Write;
 
 #[derive(Clone, Copy, Debug)]
 pub enum PageError {
-    PageExists
+    PageExists,
+    PageMissing
+}
+
+impl Display for PageError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        f.write_str("error while using PageTable: ")?;
+        match self {
+            PageError::PageExists => {
+                f.write_str("page already exists")
+            },
+            PageError::PageMissing => {
+                f.write_str("page does not exist")
+            }
+        }
+    }
+}
+
+impl Error for PageError {
+    
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -156,9 +175,21 @@ impl<A: Allocator + Clone> PageTable<A> {
         Ok(())
     }
     
+    fn remove_page(&mut self, addr: *mut Page) -> Result<(), PageError> {
+        let index = (addr as usize >> 12) & 0x3FF;
+        if self.raw.get_item(index).is_empty() {
+            return Err(PageError::PageMissing);
+        }
+        unsafe { self.raw.set_item(index, Page32Element::new_empty()) ;}
+
+        Ok(())
+    }
+
     fn get_page(&self, addr: *mut Page) -> Option<*mut Page> {
         self.raw.get_item((addr as usize >> 12) & 0x3FF).get_ptr()
     }
+
+
 }
 
 impl<A: Allocator + Clone> Drop for PageTable<A> {
@@ -221,27 +252,29 @@ impl<A: Allocator + Clone> PageDirectory<A> {
 }
 
 #[derive(Clone, Debug)]
-pub struct PageMap32<A: Allocator + Clone> {
-    inner: RefCell<PageDirectory<A>>,
-    // Once there are more allocation modes this'll need to be more complicated
-    allocptr: Cell<Option<*mut Page>>,
+pub struct PageMap32<A: CAllocator> {
+    inner: PageDirectory<A>,
     a: A
 }
 
-impl<PA: Allocator + Clone> PageMap<PA> for PageMap32<PA> {
-    type InsertError = PageError;
+impl<PA: CAllocator> TransToPhys for PageMap32<PA> {
+    type MapError = PageError;
+    fn trans_page(&self, addr: *mut Page) -> Result<*mut Page, Self::MapError> {
+        todo!()
+    }
+}
+
+impl<PA: CAllocator> PageMap<PA> for PageMap32<PA> {
 
     fn new(a: PA) -> Self {
         Self { 
-            inner: RefCell::new(PageDirectory::new_in(a.clone())),
-            allocptr: Cell::new(None),
+            inner: PageDirectory::new_in(a.clone()),
             a
         }
     }
 
-    fn insert_phys(&self, addr: *mut Page, value: *mut Page, page_type: PageType, perms: Permission) -> Result<(), PageError> {
-        let mut binding = self.inner.borrow_mut();
-        let pt = binding.get_page_table_mut(addr);
+    fn insert_phys(&mut self, addr: *mut Page, value: *mut Page, page_type: PageType, perms: Permission) -> Result<(), PageError> {
+        let pt = self.inner.get_page_table_mut(addr);
         pt.insert_page(addr, value, page_type, perms)?;
         Ok(())
     }
@@ -250,28 +283,32 @@ impl<PA: Allocator + Clone> PageMap<PA> for PageMap32<PA> {
 //         // TODO: splitting value up into chunks of 2^22 and not calling get_page_table_mut() every time would be faster
 
 //     }
-    fn get_phys(&self, addr: *mut u8) -> Option<*mut u8> {
-        let binding = self.inner.borrow();
-        let page = addr.mask(!0xFFF) as *mut Page;
-        let offset = addr as usize & 0xFFF;
-        let Some(pt) = binding.get_page_table(page) else {
-            return None;
-        };
-        pt.get_page(page)
-            .map(|ptr| unsafe { (ptr as *mut u8).add(offset) } )
+//     fn get_phys(&self, addr: *mut Page) -> Option<*mut Page> {
+//         let binding = self.inner.borrow();
+//         let page = addr.mask(!0xFFF) as *mut Page;
+//         let offset = addr as usize & 0xFFF;
+//         let Some(pt) = binding.get_page_table(page) else {
+//             return None;
+//         };
+//         pt.get_page(page)
+//             .map(|ptr| unsafe { (ptr as *mut u8).add(offset) } )
+//    }
+
+   fn remove_phys(&mut self, addr: *mut Page) -> Result<(), Self::MapError> {
+        let table = self.inner.get_page_table_mut(addr);
+        table.remove_page(addr)
    }
 
-   fn remove_phys(&self, addr: *mut Page) -> Result<(), Self::InsertError> {
-        let binding = self.inner.borrow();
-        let table = binding.get_page_table_mut(addr);
+//    fn allocate_and_page<'a, A: Allocator + 'a>(&'a self, a: A, page_type: PageType, perms: Permission, strat: AllocationStrategy) -> PageAllocator<'a, PA, A> {
+//        PageAllocator { pagemap: self, local: a, strat, page_type, perms }
+//    }
+
+   fn allocate_and_page<'a, A: CAllocator + 'a, T: TransToPhys>(&'a mut self, a: A, perms: Permission, curr_map: &'a T) -> PageAllocator32<'a, PA, A, T> {
+        PageAllocator32::new(self, perms, a, curr_map)
    }
 
-   fn allocate_and_page<'a, A: Allocator + 'a>(&'a self, a: A, page_type: PageType, perms: Permission, strat: AllocationStrategy) -> PageAllocator<'a, PA, A> {
-       PageAllocator { pagemap: self, local: a, strat, page_type, perms }
-   }
-
-   unsafe fn build<'a>(&'a mut self, _: &mut PageToken) -> &'a mut PageToken {
-    let ptr = &raw const *self.inner.borrow().raw;
+   unsafe fn build(&mut self, _: PageToken) -> PageToken {
+    let ptr = &raw const *self.inner.raw;
     unsafe { 
         asm!(
             "mov cr3, {ptr}",
@@ -283,63 +320,59 @@ impl<PA: Allocator + Clone> PageMap<PA> for PageMap32<PA> {
         );
     }
 
-    return Box::leak(Box::new(unsafe { PageToken::new() }));
+    return unsafe { PageToken::new() };
    }
 }
 
-pub struct PageAllocator<'table, PA: Allocator + Clone, A: Allocator + 'table> {
-    pagemap: &'table PageMap32<PA>,
-    local: A,
+#[derive(Clone, Copy, Debug)]
+pub enum MapAllocErr<TransError: Error, MapError: Error> {
+    AllocError(AllocError),
+    TransError(TransError),
+    MapError(MapError)
+}
 
-    strat: AllocationStrategy,
-    page_type: PageType,
+impl<A: Error, B: Error> Display for MapAllocErr<A, B> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        f.write_str("Error allocating or maping page")
+    }
+}
+
+impl<A: Error, B: Error> Error for MapAllocErr<A, B> {}
+
+pub struct PageAllocator32<'table, PA: CAllocator, DA: CAllocator, T: TransToPhys> {
+    inner: &'table mut PageMap32<PA>,
     perms: Permission,
+    // strat: AllocationStrategy,
+    // curr_ptr: *mut Page,
+    a: DA,
+    curr_map: &'table T
 }
 
+impl<'a, PA: CAllocator, DA: CAllocator, T: TransToPhys> PageAllocator32<'a, PA, DA, T> {
+    fn new(inner: &'a mut PageMap32<PA>, perms: Permission, a: DA, curr_map: &'a T) -> Self {
+        Self { inner, perms, a, curr_map }
 
-unsafe impl<'a, PA: Allocator + Clone, A: Allocator + 'a> Allocator for PageAllocator<'a, PA, A> {
-    fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
-        let result = self.local.allocate(layout);
-        if let Ok(val) = result {
-            assert!(self.strat == AllocationStrategy::Kernel);
-            let dst = self.pagemap.allocptr.take().unwrap();
-            let len = val.len().div_ceil(0x1000);
-            let src = val.as_ptr().mask(!0xFFF) as *mut Page;
-            assert!(src.is_aligned());
-            self.pagemap.insert_many(dst, src, len, self.page_type, self.perms).map_err(|_| AllocError)?;
-            self.pagemap.allocptr.set(Some(unsafe { dst.add(len) }));
-        }
-        result
-    }
-
-    unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
-        unsafe { self.local.deallocate(ptr, layout) };
     }
 }
 
-// impl<'a, A: Allocator> PageAllocator<'a, A> {
+impl<'a, PA: CAllocator, DA: CAllocator, T: TransToPhys> MappedPageAllocator for PageAllocator32<'a, PA, DA, T> {
+    type A = DA;
+    type T = T;
+    fn allocate_page(&mut self, loc: *mut Page, page_type: PageType) -> Result<Box<Page, Self::A>, MapAllocErr<T::MapError, <PageMap32<PA> as TransToPhys>::MapError>> {
+        let mut val = Page::try_uninit_box(self.a.clone()).map_err(MapAllocErr::AllocError)?;
+        let phys = self.curr_map.trans_page(&raw mut *val).map_err(MapAllocErr::TransError)?;
+        // assert!(matches!(self.strat, AllocationStrategy::Kernel));
+        self.inner.insert_phys(loc, phys, page_type, self.perms).map_err(MapAllocErr::MapError)?;
+        Ok(val)
+    }
 
-// }
-
-// impl<'a, A: Allocator> InstantiateAllocator for PageAllocator<'a, A> {
-//     fn create<'b>(&'b self, page_type: PageType, perms: Permission) -> impl Allocator + 'b {
-        
-//     }
-// }
-
-// unsafe impl<A: Allocator> Allocator for PageAllocator<'_, A> {
-    // fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
-    //     let result = self.local.allocate(layout);
-    //     if let Ok(val) = result {
-    //         let len = val.len().div_ceil(0x1000);
-    //         let ptr = val.as_ptr().mask(!0xFFF) as *mut Page;
-    //         assert!(ptr.is_aligned());
-    //         self.pagemap.set_phys_many(self.curr, ptr, len, page_type, perms);
-    //     }
-    //     result
-    // }
-
-//     unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
-
-//     }
-// }
+    fn allocate_many(&mut self, loc: *mut Page, page_type: PageType, size: usize) -> Result<Box<[Page], Self::A>, MapAllocErr<T::MapError, <PageMap32<PA> as TransToPhys>::MapError>> {
+        let mut val = Page::try_uninit_many(size, self.a.clone()).map_err(MapAllocErr::AllocError)?;
+        let phys = self.curr_map.trans_page(&raw mut val[0]).map_err(MapAllocErr::TransError)?;
+        // assert!(matches!(self.strat, AllocationStrategy::Kernel));
+        self.inner.insert_many(loc, phys, size, page_type, self.perms).map_err(MapAllocErr::MapError)?;
+        // let out_ptr = self.curr_ptr;
+        // self.curr_ptr = unsafe { self.curr_ptr.add(size) };
+        Ok(val)
+    }
+}

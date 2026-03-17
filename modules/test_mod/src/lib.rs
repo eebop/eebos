@@ -12,49 +12,20 @@ use core::ptr::NonNull;
 use core::*;
 use core::fmt::Write;
 
-// mod shared;
-// mod test_dep;
-
-// #[link(name="libtest_dep.so", kind="dylib")]
-// extern crate test_dep;
-
 extern crate alloc;
 extern crate test_dep;
 extern crate dyshared;
 extern crate paging;
+extern crate process;
 
 use alloc::alloc::AllocError;
 use alloc::boxed::Box;
+use alloc::collections::btree_map::BTreeMap;
 use dyshared::Page;
-use paging::PageMap;
+use paging::{PageMap, PageType};
 use dyshared::screen::Screen;
 // use dyshared::cpuinfo::get_cr0;
 // use test_dep::test;
-
-// #[panic_handler]
-// fn panic<'a, 'b>(_: &'a PanicInfo<'b>) -> ! {
-//     loop {}
-// }
-
-// #[unsafe(no_mangle)]
-// pub extern "C" fn __libc_start_main() {
-//     main();
-// }
-
-// struct EmptyAllocator;
-
-// unsafe impl GlobalAlloc for EmptyAllocator {
-//     unsafe fn alloc(&self, layout: alloc::Layout) -> *mut u8 {
-//         panic!("Alloc not supported here!");
-//     }
-
-//     unsafe fn dealloc(&self, ptr: *mut u8, layout: alloc::Layout) {
-//         panic!("Alloc not supported here!");
-//     }
-// }
-
-// #[global_allocator]
-// static empty_allocator: EmptyAllocator = EmptyAllocator;
 
 static mut DATAPTR: NonNull<u8> = core::ptr::NonNull::dangling();
 
@@ -83,32 +54,42 @@ unsafe impl Allocator for SimpleAllocator {
 struct TestData(u32);
 
 #[unsafe(no_mangle)]
-pub extern "C" fn main(ptr: *mut u8) -> u32 {
+fn main(ptr: *mut u8, _: u8/*, data: *const BTreeMap<&str, &[u8]>*/) {
+    writeln!(Screen::new(), "ptr is: {:?} (in main)", ptr);
     unsafe {DATAPTR = NonNull::new_unchecked(ptr) }
     let mut pagetable = paging::page32::PageMap32::new(SimpleAllocator);
 
     writeln!(Screen::new(), "calling test_dep...");
-    
 
     test_dep::test();
-    
     // writeln!(Screen::new(), "cr0 is {}", get_cr0());
 
     pagetable.insert_many(core::ptr::null_mut(), core::ptr::null_mut(), 8192, paging::PageType::Write, paging::Permission::Supervisor).unwrap();
-    // writeln!(Screen::new(), "paging is {:?}", x);
 
     let mut x = Box::new_in(TestData(0), SimpleAllocator);
     let mut y = Box::new_in(TestData(1), SimpleAllocator);
     
+
+
+    pagetable.remove_phys(&raw mut *x as *mut Page).unwrap();
     pagetable.insert_phys(&raw mut *x as *mut Page, &raw mut *y as *mut Page, paging::PageType::Write, paging::Permission::Supervisor).unwrap();
+
+
+    let map = paging::IdentityMap;
+    let mut da = pagetable.allocate_and_page(SimpleAllocator, paging::Permission::Supervisor, &map);
+
+    let val = process::test_load_a(SimpleAllocator, &mut da);
+
 
     unsafe {
         let mut val = paging::PageToken::new();
-        pagetable.build(&mut val);
+        pagetable.build(val);
 
     };
-    writeln!(Screen::new(), "val is: {}", x.0);
+    writeln!(Screen::new(), "val ({:?}) is: {}", &raw const x.0, x.0);
 
+    let val = unsafe { core::mem::transmute::<_, extern "C" fn()>(val) };
+    val();
 
     loop {}
 }

@@ -32,7 +32,7 @@ fn __rust_alloc_error_handler(_: core::alloc::Layout) -> ! {
 extern crate alloc;
 
 use core::{alloc::{GlobalAlloc, Layout}, fmt::{Write}, panic::PanicInfo};
-use alloc::alloc::{Global, alloc};
+use alloc::{alloc::{Global, alloc}, collections::btree_map::BTreeMap};
 use alloc::vec::Vec;
 
 use shared::{bochsdbg, screen::Screen, SysCallInternal};
@@ -101,7 +101,7 @@ pub extern "C" fn rustmain(mem: *mut u8) {
 
 
     let mut proc = elf::load_mod("libtest_mod.so");
-    writeln!(Screen::new(), "HERE");
+    writeln!(Screen::new(), "now here in rustmain");
     // for ptr in proc.init_fns {
     //     writeln!(Screen::new(), "here, calling {ptr}");
     //     let ptr: extern "C" fn() = unsafe { core::mem::transmute(ptr) };
@@ -113,34 +113,15 @@ pub extern "C" fn rustmain(mem: *mut u8) {
     //     write!(Screen::new(), "{:x?} ", unsafe{ *ptr.add(x) });
 
     // }
-    let ptr: extern "C" fn(*mut u8) = unsafe { core::mem::transmute(ptr) };
-    ptr(unsafe { DATAPTR });
+    let ptr: extern "C" fn(*mut u8/* *const BTreeMap<&str, &[u8]>*/, u8) = unsafe { core::mem::transmute(ptr) };
+    bochsdbg();
+    ptr(unsafe { DATAPTR }, 1/*, unsafe { &raw const *elf::ELF_DATA.get() }*/);
     // unsafe {
     //     for i in 0..10 {
     //         write!(Screen::new(), "{:x?} ", *ptr.add(i));
     //     }
     // }
     loop {}
-    // STATE.processes.borrow_mut().push(pic);
-
-    // STATE.currentProcess.replace(Some(0));
-
-
-    // {    
-    //     let mut ptr = STATE.interrupts.borrow_mut();
-    //     // ptr[0x30] = shared::Syscall::Request(syscall::submit_syscall);
-
-    //     ptr[0x20] = shared::Syscall::Request(syscall::api_request);
-    //     ptr[0x21] = shared::Syscall::Request(syscall::api_return);
-    //     ptr[0x22] = shared::Syscall::Request(syscall::submit_interface);
-
-    //     ptr[0x50] = shared::Syscall::Request(kmalloc);
-    //     ptr[0xfe] = shared::Syscall::Request(load_syscall);
-    // };
-
-    // let ptr = proc._start;
-
-    // proc.make_fncall(ptr, Global);
 }
 
 #[unsafe(no_mangle)]

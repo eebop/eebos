@@ -1,5 +1,5 @@
 [package]
-name = "test_mod"
+name = "process"
 version = "0.1.0"
 edition = "2024"
 
@@ -12,8 +12,8 @@ panic = "abort"
 [profile.dev]
 panic = "abort"
 
+
 [dependencies]
-paging = { version = "0.1.0", path = "../paging" }
 dyshared = { version = "0.1.0", path = "../dyshared" }
-process = { version = "0.1.0", path = "../process" }
-test_dep = { version = "0.1.0", path = "../test_dep" }
+elf = { version = "0.8.0", default-features = false, features = ["alloc", "to_str"] }
+paging = { version = "0.1.0", path = "../paging" }
