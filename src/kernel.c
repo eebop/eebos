@@ -82,6 +82,10 @@ extern uint8_t _binary_test_mod_size;
 extern uint32_t stack_top;
 
 
+void cinteroptest() {
+	
+}
+
 void kernel_main(void)
 {
 	/* Initialize terminal interface */

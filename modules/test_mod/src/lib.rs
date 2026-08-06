@@ -1,13 +1,18 @@
 #![no_std]
 #![no_main]
 #![feature(allocator_api)]
-#![feature(ptr_mask)]
+
+// writeln! generates these which is very annoying
+#![allow(unused_must_use)]
+
+// TODO: clean these up
+#![allow(unused_imports)]
 
 use core::alloc::{Allocator, GlobalAlloc, Layout};
 use core::num::NonZero;
 use core::panic::PanicInfo;
 
-use core::arch::asm;
+use core::arch::{asm, naked_asm};
 use core::ptr::NonNull;
 use core::*;
 use core::fmt::Write;
@@ -21,7 +26,7 @@ extern crate process;
 use alloc::alloc::AllocError;
 use alloc::boxed::Box;
 use alloc::collections::btree_map::BTreeMap;
-use dyshared::Page;
+use dyshared::{Page, bochsdbg};
 use paging::{PageMap, PageType};
 use dyshared::screen::Screen;
 // use dyshared::cpuinfo::get_cr0;
@@ -54,12 +59,25 @@ unsafe impl Allocator for SimpleAllocator {
 struct TestData(u32);
 
 #[unsafe(no_mangle)]
-fn main(ptr: *mut u8, _: u8/*, data: *const BTreeMap<&str, &[u8]>*/) {
-    writeln!(Screen::new(), "ptr is: {:?} (in main)", ptr);
-    unsafe {DATAPTR = NonNull::new_unchecked(ptr) }
+pub extern "C" fn start(ptr: *mut u8, data: *const BTreeMap<&str, &[u8]>) -> ! { 
+    unsafe {DATAPTR = NonNull::new(ptr).unwrap() }
+    let map = unsafe { data.read() };
+    main(map);
+}
+
+
+#[unsafe(no_mangle)]
+pub fn higher_half_entry() -> ! {
+    writeln!(Screen, "Now here in higher_half_entry!");
+    loop {}
+}
+
+fn main(data: BTreeMap<&str, &[u8]>) -> ! {
+    // writeln!(Screen, "ptr is: {:?} (in main)", ptr);
+
     let mut pagetable = paging::page32::PageMap32::new(SimpleAllocator);
 
-    writeln!(Screen::new(), "calling test_dep...");
+    writeln!(Screen, "calling test_dep...");
 
     test_dep::test();
     // writeln!(Screen::new(), "cr0 is {}", get_cr0());
@@ -79,17 +97,24 @@ fn main(ptr: *mut u8, _: u8/*, data: *const BTreeMap<&str, &[u8]>*/) {
     let mut da = pagetable.allocate_and_page(SimpleAllocator, paging::Permission::Supervisor, &map);
 
     let val = process::test_load_a(SimpleAllocator, &mut da);
-
+    // let (ptr, data) = process::load_higher_half(&data, SimpleAllocator, &mut da);
 
     unsafe {
-        let mut val = paging::PageToken::new();
-        pagetable.build(val);
-
+        let token = paging::PageToken::new();
+        pagetable.build(token);
     };
-    writeln!(Screen::new(), "val ({:?}) is: {}", &raw const x.0, x.0);
 
-    let val = unsafe { core::mem::transmute::<_, extern "C" fn()>(val) };
-    val();
 
+    interrupts::test(SimpleAllocator);
     loop {}
+    let ptr: fn() -> ! = unsafe { core::mem::transmute(val) };
+    ptr();
+
+
+    // writeln!(Screen, "val ({:?}) is: {}", &raw const x.0, x.0);
+    // bochsdbg();
+    // let val = unsafe { core::mem::transmute::<_, extern "C" fn()>(val) };
+    // val();
+
+    // loop {}
 }

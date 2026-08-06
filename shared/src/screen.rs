@@ -68,3 +68,17 @@ impl fmt::Write for Screen {
         Ok(())
     }
 }
+
+
+pub struct Com1;
+
+impl fmt::Write for Com1 {
+    fn write_str(&mut self, s: &str) -> fmt::Result {
+        for byte in s.as_bytes() {
+            // There is setup and error-correcting that is needed, but this will only be emulated
+            // and it works, so no need for now
+            out8(0x3f8, *byte);
+        }
+        Ok(())
+    }
+}

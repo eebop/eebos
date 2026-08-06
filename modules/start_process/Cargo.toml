@@ -8,6 +8,7 @@ panic = "abort"
 
 [profile.dev]
 panic = "abort"
+debug = true
 
 [dependencies]
 shared = { version = "0.1.0", path = "../../shared" }

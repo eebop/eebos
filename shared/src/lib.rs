@@ -1,6 +1,5 @@
 #![no_std]
 #![feature(sync_unsafe_cell)]
-#![feature(ptr_as_ref_unchecked)]
 #![feature(allocator_api)]
 #![feature(negative_impls)]
 #![feature(never_type)]
@@ -11,7 +10,7 @@
 extern crate alloc;
 
 use core::ffi::c_void;
-use core::*;
+use core::prelude::rust_2024::*;
 use core::arch::asm;
 use core::mem::MaybeUninit;
 

@@ -1,4 +1,4 @@
-use core::{cell::RefCell, cmp, fmt::{Debug, Write}, ops::{Index, Range}, result};
+use core::{cell::{Cell, OnceCell, RefCell}, cmp, fmt::{Debug, Write}, iter, ops::{Index, Range}, ptr::NonNull, result};
 
 use alloc::{alloc::{AllocError, Allocator, Global}, borrow::ToOwned, boxed::Box, collections::{btree_map::BTreeMap, btree_set::BTreeSet}, fmt::format, slice, string::{String, ToString}, vec::Vec};
 use alloc::format;
@@ -7,18 +7,47 @@ use elf::{ElfBytes, ParseError, abi::STB_GLOBAL, dynamic::DynamicTable, endian::
 use dyshared::{Page, PageAligned, screen::Screen, CAllocator};
 use paging::{MappedPageAllocator, TransToPhys};
 
+use crate::data_repr::{DataLoc, SharedDataRepr};
 
+
+#[derive(Debug)]
 pub struct Module<LA: CAllocator, DA: MappedPageAllocator> {
-    pub allocations: Vec<Box<[Page], DA::A>, LA>,
-    pub init_fns: Vec<u32, LA>,
-    pub fini_fns: Vec<u32, LA>,
+    pub allocation: Box<[Page], DA::A>,
+    // pub init_fns: Vec<u32, LA>,
+    // pub fini_fns: Vec<u32, LA>,
     pub symbols: BTreeMap<String, (Symbol, Relocation), LA>,
     pub fhdr: FileHeader<AnyEndian>
 }
 
-pub fn load_mod<'a, LA: CAllocator, DA: MappedPageAllocator>(name: &'a str, lookup: &impl Index<&'a str, Output=&'a [u8]>, local_alloc: LA, data_alloc: &mut DA) -> Module<LA, DA> {
+
+pub enum AllocationStrategy {
+    Exact,
+    ArbitraryKernel
+}
+
+#[derive(Clone, Debug)]
+enum OneOf<Item, A: Iterator<Item=Item> + Clone, B: Iterator<Item=Item> + Clone> {
+    A(A),
+    B(B)
+}
+
+impl<Item, A: Iterator<Item=Item> + Clone, B: Iterator<Item=Item> + Clone> Iterator for OneOf<Item, A, B> {
+    type Item = Item;
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            Self::A(inner) => {
+                inner.next()
+            },
+            Self::B(inner) => {
+                inner.next()
+            }
+        }
+    }
+}
+
+pub fn load_mod<'a, LA: CAllocator, DA: MappedPageAllocator>(name: &'a str, lookup: &impl Index<&'a str, Output=&'a [u8]>, alloc_strat: AllocationStrategy, local_alloc: LA, data_alloc: &mut DA) -> Module<LA, DA> {
     // Topological sort of so
-    let mut all: BTreeMap<&str, SOChunk<LA, DA>, _> = BTreeMap::new_in(local_alloc.clone());
+    let mut all: BTreeMap<&str, SOChunk<LA>, _> = BTreeMap::new_in(local_alloc.clone());
     let mut leaves: BTreeSet<&str, _> = BTreeSet::new_in(local_alloc.clone());
     leaves.insert(name);
     
@@ -26,11 +55,9 @@ pub fn load_mod<'a, LA: CAllocator, DA: MappedPageAllocator>(name: &'a str, look
     // let x = lookup[name];
 
     while let Some(leaf) = leaves.pop_first() {
-        writeln!(Screen::new(), "here in load_mod, {:?}", name);
 
-        let chunk = parse_elf(lookup[leaf], local_alloc.clone(), data_alloc).unwrap_or_else(|e| {writeln!(Screen::new(), "ERROR: parse_elf: {e:?}"); panic!() });
-
-        writeln!(Screen::new(), "here: {leaf:?}");
+        writeln!(Screen, "leaf is: {:?}", leaf);
+        let chunk = parse_elf(lookup[leaf], local_alloc.clone()).unwrap_or_else(|e| {writeln!(Screen, "ERROR: parse_elf: {e:?}"); panic!() });
 
         leaves.extend(&chunk.needed);
 
@@ -44,7 +71,6 @@ pub fn load_mod<'a, LA: CAllocator, DA: MappedPageAllocator>(name: &'a str, look
     heads.insert(name);
 
     while let Some(curr) = heads.pop_first() {
-        writeln!(Screen::new(), "sorting: {curr:?}");
 
         output.push(curr);
         for target in &all[curr].needed {
@@ -53,24 +79,85 @@ pub fn load_mod<'a, LA: CAllocator, DA: MappedPageAllocator>(name: &'a str, look
             }
         }
     }
-    writeln!(Screen::new(), "order is: (last first) {output:?}");
-    let mut symbols: BTreeMap<&str, (Symbol, Relocation), _> = BTreeMap::new_in(local_alloc.clone());
-    let mut init_fns = Vec::new_in(local_alloc.clone());
-    let mut fini_fns = Vec::new_in(local_alloc.clone());
-    let mut allocations = Vec::new_in(local_alloc.clone());
-    for val in output.iter().rev() {
-        writeln!(Screen::new(), "Now linking: {:?}", val);
-        let mut object = all.remove(val).unwrap();
-        relocate_mod(&mut object, &mut symbols).unwrap();
-        init_fns.append(&mut object.init_fns);
-        fini_fns.append(&mut object.fini_fns);
-        allocations.push(object.allocation);
 
+
+    let num_pages = all.iter()
+        .map(|(_, chunk)| chunk.data.len().div_ceil(size_of::<Page>()))
+        .sum::<usize>();
+
+    let data = all.iter().map(|(name, chunk)| chunk);
+    // let alloc = joint_alloc(&data, alloc_strat, local_alloc, data_alloc);
+
+    // let mut arena: Box<[Page], <DA as MappedPageAllocator>::A> = match alloc_strat {
+    //     AllocationStrategy::Exact => data_alloc.allocate_many(joint_alloc_exact(data, local_alloc), paging::PageType::Write),
+    //     AllocationStrategy::ArbitraryKernel => data_alloc.allocate_many(joint_alloc_kernel(data, local_alloc), paging::PageType::Write),
+    // }.unwrap();
+
+    let data = match alloc_strat {
+        AllocationStrategy::Exact => OneOf::A(joint_alloc_exact(data, local_alloc.clone())),
+        AllocationStrategy::ArbitraryKernel => OneOf::B(joint_alloc_kernel(data, local_alloc.clone()))
+    };
+
+    // writeln("")
+
+    let data = data.zip(all.iter());
+
+    // let mut doc = Vec::new_in(local_alloc.clone());
+    // data.clone().collect_into(&mut doc);
+    // writeln!(Screen, "cloned data is: {doc:x?}");
+
+    let new = data.clone()
+        .map(|(page, (_, chunk))| (page as usize, chunk.data.len()))
+        .map(|(ptr, size)| ptr..(ptr + size))
+        .map(|range| range.step_by(size_of::<Page>()))
+        .flatten()
+        .map(|ptr| ptr as *mut Page);
+
+
+    let mut doc = Vec::new_in(local_alloc.clone());
+    new.clone().collect_into(&mut doc);
+    writeln!(Screen, "now allocating for data_alloc, new is: {:?}", doc);
+    let mut arena = data_alloc.allocate_many(new, num_pages, paging::PageType::Write).unwrap();
+
+    let mut borrow = &mut *arena;
+
+    let start = 0;
+    let mut allocations = BTreeMap::new_in(local_alloc.clone());
+
+    for (ptr, (name, obj)) in data {
+        let size = obj.data.len().div_ceil(size_of::<Page>());
+        let (this, tmp) = borrow.split_at_mut(size);
+        borrow = tmp;
+        let orig = obj.data.get_baseaddr();
+        let reloc = Relocation {
+            original_baseaddr: orig as u32,
+            new_baseaddr: ptr as *mut u8
+        };
+        obj.data.write(this, reloc);
+        allocations.insert(*name, (this, reloc));
     }
+
+
+
+    writeln!(Screen, "order is: (last first) {output:?}");
+    let mut symbols: BTreeMap<&str, (Symbol, Relocation), _> = BTreeMap::new_in(local_alloc.clone());
+    // let mut init_fns = Vec::new_in(local_alloc.clone());
+    // let mut fini_fns = Vec::new_in(local_alloc.clone());
+    for val in output.into_iter().rev() {
+        writeln!(Screen, "Now linking: {:?}", val);
+        let mut object = all.remove(val).unwrap();
+        let (data, reloc) = allocations.remove(val).unwrap();
+        writeln!(Screen, "relocating: {:?}", val);
+        relocate_mod(&mut object, reloc, data, &mut symbols).unwrap();
+        // init_fns.append(&mut object.init_fns);
+        // fini_fns.append(&mut object.fini_fns);
+    }
+
 
     let mut map = BTreeMap::new_in(local_alloc.clone());
     symbols.into_iter().map(|(k, v)| (k.to_string(), v)).collect_into(&mut map);
-    Module { allocations, init_fns, fini_fns, symbols: map, fhdr }
+    // todo!()
+    Module { allocation: arena, /* init_fns, fini_fns, */ symbols: map, fhdr }
 
 }
 
@@ -103,6 +190,7 @@ fn reinterpret_slice_mut<T, U>(i: &mut [T]) -> Result<&mut [U], InterpretError> 
     }
 }
 
+#[allow(unused)]
 #[derive(Debug)]
 enum InterpretError {
     Parse(elf::ParseError),
@@ -128,8 +216,8 @@ struct Rel32 {
 }
 
 enum RelocSize {
-    Word8,
-    Word16,
+    // Word8,
+    // Word16,
     Word32
 }
 
@@ -159,15 +247,21 @@ impl Debug for Rel32 {
 // so it has to be offset by the location in memory
 #[derive(Debug, Clone, Copy)]
 struct PtrSubslice {
-    start: usize,
-    len: usize
+    start: *mut u32,
+    len: usize // in bytes
 }
 
 impl PtrSubslice {
-    fn into_range(&self, elfzero: usize) -> Range<usize> {
-        return (self.start - elfzero)..(self.start - elfzero + self.len)
+    fn into_range(&self, elfzero: *const u32) -> Range<usize> {
+        let diff = unsafe { self.start.offset_from(elfzero) } as usize;
+        return (diff)..(diff + self.len)
     }
-    fn maybe_from(start: Option<usize>, len: Option<usize>) -> Result<Option<Self>, InterpretError> {
+
+    fn into_ptr_slice(&self) -> *mut [u32] {
+        unsafe { slice::from_raw_parts_mut(self.start, self.len.div_exact(size_of::<u32>()).unwrap()) }
+    }
+
+    fn maybe_from(start: Option<*mut u32>, len: Option<usize>) -> Result<Option<Self>, InterpretError> {
         if let (Some(start), Some(len)) = (start, len) {
             Ok(Some(PtrSubslice { start: start, len: len}))
         } else if let (None, None) = (start, len) {
@@ -177,6 +271,20 @@ impl PtrSubslice {
         }
     }
 }
+
+fn joint_alloc_exact<'b, 'a: 'b, LA: CAllocator + 'b>(data: impl Iterator<Item=&'b SOChunk<'a, LA>> + Clone, local_alloc: LA) -> impl Iterator<Item = *mut Page> + Clone {
+    data.map(|val| val.data.get_baseaddr() as *mut Page)
+}
+
+fn joint_alloc_kernel<'b, 'a: 'b, LA: CAllocator + 'b>(data: impl Iterator<Item=&'b SOChunk<'a, LA>> + Clone, local_alloc: LA) -> impl Iterator<Item = *mut Page> + Clone {
+    data.scan(0x80000000, |coord, chunk| {
+        let size = chunk.data.len();
+        let out = *coord;
+        *coord += size.next_multiple_of(0x1000);
+        Some(out as *mut Page)
+    })
+}
+
 struct DynamicStruct<'data, A: CAllocator> {
     init_fn: Option<u32>,
     fini_fn: Option<u32>,
@@ -189,11 +297,11 @@ struct DynamicStruct<'data, A: CAllocator> {
 
 fn get_dynamic_data<'data, E: EndianParse, LA: CAllocator>(code: &'data [u8], table: DynamicTable<E>, a: LA) -> Result<DynamicStruct<'data, LA>, InterpretError> {
     let mut init_fn: Option<u32> = None;
-    let mut init_ptr: Option<usize> = None; // these really should be u64 but we are in 32 bit mode so there's not even a way to load a module > 2^31 bits
+    let mut init_ptr: Option<*mut u32> = None;
     let mut init_size: Option<usize> = None;
 
     let mut fini_fn: Option<u32> = None;
-    let mut fini_ptr: Option<usize> = None;
+    let mut fini_ptr: Option<*mut u32> = None;
     let mut fini_size: Option<usize> = None;
 
     let mut needed_offsets: Vec<usize, _> = Vec::new_in(a.clone());
@@ -253,13 +361,14 @@ fn get_dynamic_data<'data, E: EndianParse, LA: CAllocator>(code: &'data [u8], ta
                 // Symbol size
             },
             elf::abi::DT_INIT_ARRAY => {
-                init_ptr = Some(symbol.d_ptr() as usize);
+                init_ptr = Some(symbol.d_ptr() as *mut u32);
             },
             elf::abi::DT_INIT_ARRAYSZ => {
+                // size, in bytes, of DT_INIT_ARRAY section
                 init_size = Some(symbol.d_val() as usize);
             },
             elf::abi::DT_FINI_ARRAY => {
-                fini_ptr = Some(symbol.d_ptr() as usize);
+                fini_ptr = Some(symbol.d_ptr() as *mut u32);
             },
             elf::abi::DT_FINI_ARRAYSZ => {
                 fini_size = Some(symbol.d_val() as usize);
@@ -315,14 +424,24 @@ fn get_dynamic_data<'data, E: EndianParse, LA: CAllocator>(code: &'data [u8], ta
 
     let fini_array = PtrSubslice::maybe_from(fini_ptr, fini_size)?;
 
-    let rel_array = PtrSubslice::maybe_from(relptr, relsz)?
-        .map(|x| &code[x.into_range(0)])
+    fn slice_option(ptr: Option<usize>, byte_len: Option<usize>) -> Option<Range<usize>> {
+        if let (Some(ptr), Some(len)) = (ptr, byte_len) {
+            return Some(ptr..(ptr+len))
+        } else if let (None, None) = (ptr, byte_len) {
+            return None
+        } else {
+            panic!("misssing ptr without size")
+        }
+    }
+
+    let rel_array = slice_option(relptr, relsz)
+        .map(|x| &code[x])
         .map(|x| reinterpret_slice::<u8, Rel32>(x))
         .transpose()?
         .unwrap_or_default();
 
-    let jmprel_array = PtrSubslice::maybe_from(jmprelptr, jmprelsz)?
-        .map(|x| &code[x.into_range(0)])
+    let jmprel_array = slice_option(jmprelptr, jmprelsz)
+        .map(|x| &code[x])
         .map(|x| reinterpret_slice::<u8, Rel32>(x))
         .transpose()?
         .unwrap_or_default();
@@ -345,19 +464,19 @@ impl Relocation {
     }
 }
 
-struct SOChunk<'data, LA: CAllocator, DA: MappedPageAllocator> {
-    init_fns: Vec<u32, LA>,
-    fini_fns: Vec<u32, LA>,
+#[derive(Debug)]
+struct SOChunk<'data, LA: CAllocator> {
+    // init_fns: Vec<u32, LA>,
+    // fini_fns: Vec<u32, LA>,
     rel_array: &'data [Rel32],
     jmprel_array: &'data [Rel32],
     needed: Vec<&'data str, LA>,
     dynsymstr: Option<(SymbolTable<'data, AnyEndian>, StringTable<'data>)>,
-    allocation: Box<[Page], DA::A>,
-    baseaddr: Relocation,
+    data: SharedDataRepr<'data, LA>,
     phdr: FileHeader<AnyEndian>
 }
 
-fn parse_elf<'data, LA: CAllocator, DA: MappedPageAllocator>(code: &'data [u8], local_alloc: LA, data_alloc: &mut DA) -> Result<SOChunk<'data, LA, DA>, InterpretError> {
+fn parse_elf<'data, LA: CAllocator>(code: &'data [u8], local_alloc: LA) -> Result<SOChunk<'data, LA>, InterpretError> {
 
     // assert!((&raw const *code)());
 
@@ -399,7 +518,15 @@ fn parse_elf<'data, LA: CAllocator, DA: MappedPageAllocator>(code: &'data [u8], 
                 loads.push(header);
             },
             elf::abi::PT_DYNAMIC => {
-                let dynam = file.dynamic().unwrap().unwrap();
+                // let dynam = file.dynamic().expect("parsing error").expect("found dynamic section");
+                let (start, len) = (header.p_offset as usize, header.p_filesz as usize);
+                let buf = &code[start..(start + len)];
+                let dynam = DynamicTable::new(
+                file.ehdr.endianness,
+                    file.ehdr.class,
+                    buf,
+                );
+
                 dyn_data = Some(get_dynamic_data(code, dynam, local_alloc.clone())?);
 
             },
@@ -435,49 +562,61 @@ fn parse_elf<'data, LA: CAllocator, DA: MappedPageAllocator>(code: &'data [u8], 
     // It'd be better to just allocate the sections we need instead of inclusively
     let num_pages = usize::div_ceil((latest - earliest) as usize, 0x1000);
 
-    let mut owned_data = data_alloc.allocate_many(earliest as *mut Page, paging::PageType::Write, num_pages as usize)
-        .map_err(|e| InterpretError::AllocError("Error putting data into pages".to_string()))?;
+    // let mut owned_data = data_alloc.allocate_many(earliest as *mut Page, paging::PageType::Write, num_pages as usize)
+        // .map_err(|e| InterpretError::AllocError("Error putting data into pages".to_string()))?;
 
 
-    let new_earliest = owned_data.as_ptr() as usize; 
+    // let new_earliest = owned_data.as_ptr() as usize; 
 
 
-    let array = owned_data.as_contiguous();
+    // let array = owned_data.as_contiguous();
+
+    let mut repr = SharedDataRepr::new_in(local_alloc.clone());
 
     for header in loads {
-        let start = header.p_vaddr as usize - earliest as usize;
-        array[start..][..header.p_filesz as usize].copy_from_slice(&code[header.p_offset as usize..][..header.p_filesz as usize]);
-        array[start..][header.p_filesz as usize ..header.p_memsz as usize].fill(0);
+        let slice = &code[header.p_offset as usize..][..header.p_filesz as usize];
+        let data = DataLoc::new(slice, header.p_vaddr as *mut u8, header.p_filesz as usize, header.p_memsz as usize);
+        repr.insert(data);
+        // let start = header.p_vaddr as usize - earliest as usize;
+        // array[start..][..header.p_filesz as usize].copy_from_slice(&code[header.p_offset as usize..][..header.p_filesz as usize]);
+        // array[start..][header.p_filesz as usize ..header.p_memsz as usize].fill(0);
     }
 
-    // if let (Some(rinit_ptr), Some(rinit_size)) = (init_ptr, init_size) {
-    //     let subslice = &array[rinit_ptr - earliest..][..rinit_size];
-
-
-
-        // let ptrbuf = reinterpret_slice::<u8, u32>(subslice).expect("Malformed INIT_ARRAY directive");
-    let mut init_fns = Vec::new_in(local_alloc.clone());
-    let mut fini_fns = Vec::new_in(local_alloc.clone());
+    // let mut init_fns = Vec::new_in(local_alloc.clone());
+    // let mut fini_fns = Vec::new_in(local_alloc.clone());
     let mut rel_array: &'data [Rel32] = &[];
     let mut jmprel_array: &'data [Rel32] = &[];
     let mut needed = Vec::new_in(local_alloc.clone());
     if let Some(dyn_data) = dyn_data {
-        if let Some(init_fn) = dyn_data.init_fn {
-            init_fns.push(init_fn);
-        }
-        if let Some(init_array) = dyn_data.init_array {
-            let subslice = &array[init_array.into_range(earliest)];
+        // if let Some(init_fn) = dyn_data.init_fn {
+        //     init_fns.push(init_fn);
+        // }
+        // if let Some(init_array) = dyn_data.init_array {
+        //     let range = init_array.into_ptr_slice();
 
-            init_fns.extend_from_slice(reinterpret_slice::<u8, u32>(subslice)?);
-        }
+        //     // let len = range.len().div_exact(size_of::<u32>()).unwrap();
 
-        if let Some(fini_array) = dyn_data.fini_array {
-            let subslice = &array[fini_array.into_range(earliest)];
-            fini_fns.extend_from_slice(reinterpret_slice::<u8, u32>(subslice)?);
-        }
-        if let Some(fini_fn) = dyn_data.init_fn {
-            init_fns.push(fini_fn);
-        }
+        //     init_fns.extend(iter::repeat(0).take(range.len()));
+            
+        //     let start = init_fns.len() - range.len();
+        //     let slice = reinterpret_slice_mut::<u32, u8>(&mut init_fns[start..])?;
+        //     repr.get_slice(slice, range);
+        // }
+
+        // if let Some(fini_array) = dyn_data.fini_array {
+        //     let range = fini_array.into_ptr_slice();
+
+        //     // let len = range.len().div_exact(size_of::<u32>()).unwrap();
+
+        //     fini_fns.extend(iter::repeat(0).take(range.len()));
+
+        //     let start = fini_fns.len() - range.len();
+        //     let slice = reinterpret_slice_mut::<u32, u8>(&mut fini_fns[start..])?;
+        //     repr.get_slice(slice, range);
+        // }
+        // if let Some(fini_fn) = dyn_data.init_fn {
+        //     init_fns.push(fini_fn);
+        // }
         
         rel_array = dyn_data.rel_array;
         jmprel_array = dyn_data.jmprel_array;
@@ -497,18 +636,17 @@ fn parse_elf<'data, LA: CAllocator, DA: MappedPageAllocator>(code: &'data [u8], 
 
     let dynsymstr = file.dynamic_symbol_table()?;
 
-    let relocation = Relocation {original_baseaddr: earliest as u32, new_baseaddr: new_earliest as *mut u8};
+    // let relocation = Relocation {original_baseaddr: earliest as u32, new_baseaddr: new_earliest as *mut u8};
 
     Ok(SOChunk {
-        init_fns,
-        fini_fns,
+        // init_fns,
+        // fini_fns,
         rel_array,
         jmprel_array,
         needed,
         dynsymstr,
-        allocation: owned_data,
-        baseaddr: relocation,
-        phdr: file.ehdr
+        data: repr,
+        phdr: file.ehdr,
     })
 }
 
@@ -521,8 +659,7 @@ fn set_bytes_at_symbol<T>(slice: &mut [u8], ptr: u32, data: T) -> Result<(), Int
     Ok(())
 }
 
-fn relocate_mod<'data, LA: CAllocator, DA: MappedPageAllocator>(chunk: &mut SOChunk<'data, LA, DA>, symbols: &mut BTreeMap<&'data str, (Symbol, Relocation), LA>) -> Result<(), InterpretError> {
-    
+fn relocate_mod<'data, LA: CAllocator>(chunk: &mut SOChunk<'data, LA>, baseaddr: Relocation, allocation: &mut [Page], symbols: &mut BTreeMap<&'data str, (Symbol, Relocation), LA>) -> Result<(), InterpretError> {
     if let Some((ref dynsymtab, ref dynstrtab)) = chunk.dynsymstr {
         for symbol in dynsymtab.clone() {
             let name = dynstrtab.get(symbol.st_name as usize)?;
@@ -541,11 +678,11 @@ fn relocate_mod<'data, LA: CAllocator, DA: MappedPageAllocator>(chunk: &mut SOCh
                             return Err(InterpretError::SymbolError(format!("Invalid symbol overload: {}", name)));
                         }
                     }
-                    symbols.insert(name, (symbol, chunk.baseaddr));
+                    symbols.insert(name, (symbol, baseaddr));
                 },
                 elf::abi::STB_WEAK => {
                     if let None = curr {
-                        symbols.insert(name, (symbol, chunk.baseaddr));
+                        symbols.insert(name, (symbol, baseaddr));
                     }
                 }
                 _ => {
@@ -555,10 +692,10 @@ fn relocate_mod<'data, LA: CAllocator, DA: MappedPageAllocator>(chunk: &mut SOCh
         }
     }
 
-    let data = chunk.allocation.as_contiguous();
+    let data = allocation.as_contiguous();
 
     for reloc in chunk.rel_array.iter().chain(chunk.jmprel_array.iter()) {
-        let ptr = chunk.baseaddr.relocate_slice(reloc.offset);
+        let ptr = baseaddr.relocate_slice(reloc.offset);
         match reloc.get_size() {
             RelocSize::Word32 => {
                 let addend: [u8; 4]  = get_bytes_at_symbol(data, ptr);
@@ -570,7 +707,7 @@ fn relocate_mod<'data, LA: CAllocator, DA: MappedPageAllocator>(chunk: &mut SOCh
                         .map(|symbol| dynstrtab.get(symbol.st_name as usize))
                         .flatten()
                     } else {
-                        panic!("Error: no name for Rel")
+                        panic!("Error: no name for rel {reloc:?}")
                     };
 
                 let get_symbol = 
@@ -578,17 +715,17 @@ fn relocate_mod<'data, LA: CAllocator, DA: MappedPageAllocator>(chunk: &mut SOCh
                         dynsymtab.get(reloc.get_symbol() as usize)
                         .map(|symbol| dynstrtab.get(symbol.st_name as usize)
                             // If there is a known one, use that, otherwise use our UND
-                            .map(|name| symbols.get(name).cloned().unwrap_or((symbol, chunk.baseaddr))))
+                            .map(|name| symbols.get(name).cloned().unwrap_or((symbol, baseaddr))))
                         .flatten()
                     } else {
-                        panic!("Error: no symbol for rel")
+                        panic!("Error: no symbol for rel {reloc:?}")
                     };
 
                 let result = match reloc.get_type() {
                     // R_386_32
                     1 => {
                         let val = get_symbol()?;
-                        writeln!(Screen::new(), "R_386_32 {}", get_name()?);
+                        // writeln!(Screen, "R_386_32 {}", get_name()?);
                         if val.0.is_undefined() && val.0.st_bind() != elf::abi::STB_WEAK {
                             return Err(InterpretError::InvalidElfState(format!("Symbol missing: {}", get_name()?)));
                         }
@@ -597,7 +734,7 @@ fn relocate_mod<'data, LA: CAllocator, DA: MappedPageAllocator>(chunk: &mut SOCh
                     // R_386_GLOB_DAT
                     6 => {
                         let val = get_symbol()?;
-                        writeln!(Screen::new(), "R_386_GLOB_DAT {}", get_name()?);
+                        // writeln!(Screen, "R_386_GLOB_DAT {}", get_name()?);
                         if val.0.is_undefined() && val.0.st_bind() != elf::abi::STB_WEAK {
                             return Err(InterpretError::InvalidElfState(format!("Symbol missing: {}", get_name()?)));
                         }
@@ -608,7 +745,7 @@ fn relocate_mod<'data, LA: CAllocator, DA: MappedPageAllocator>(chunk: &mut SOCh
                         // Same as GLOB_DAT but we can lazy link
                         // We don't because that's harder
                         let val = get_symbol()?;
-                        writeln!(Screen::new(), "R_386_JUMP_SLOT {}", get_name()?);
+                        // writeln!(Screen, "R_386_JUMP_SLOT {}", get_name()?);
                         if val.0.is_undefined() && val.0.st_bind() != elf::abi::STB_WEAK {
                             return Err(InterpretError::InvalidElfState(format!("Symbol missing: {}", get_name()?)));
                         }
@@ -616,8 +753,8 @@ fn relocate_mod<'data, LA: CAllocator, DA: MappedPageAllocator>(chunk: &mut SOCh
                     }
                     // R_386_RELATIVE
                     8 => {
-                        writeln!(Screen::new(), "R_386_RELATIVE");
-                        unsafe { chunk.baseaddr.new_baseaddr.sub(chunk.baseaddr.original_baseaddr as usize).add(addend as usize) }
+                        // writeln!(Screen, "R_386_RELATIVE");
+                        unsafe { baseaddr.new_baseaddr.sub(baseaddr.original_baseaddr as usize).add(addend as usize) }
                     }
                     
                     _ => {panic!("unkown symbol: {:?}", reloc); }

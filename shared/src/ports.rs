@@ -6,7 +6,8 @@ pub fn in8(port: u16) -> u8 {
         asm!(
             "in al, dx",
             in("dx") port,
-            lateout("al") out
+            lateout("al") out,
+            options(nomem, nostack, preserves_flags)
         )
     }
     out
@@ -18,7 +19,9 @@ pub fn in16(port: u16) -> u16 {
         asm!(
             "in ax, dx",
             in("dx") port,
-            lateout("ax") out
+            lateout("ax") out,
+            options(nomem, nostack, preserves_flags)
+
         )
     }
     out
@@ -30,7 +33,9 @@ pub fn in32(port: u16) -> u32 {
         asm!(
             "in eax, dx",
             in("dx") port,
-            lateout("eax") out
+            lateout("eax") out,
+            options(nomem, nostack, preserves_flags)
+
         )
     }
     out
@@ -41,7 +46,9 @@ pub fn out8(port: u16, input: u8) {
         asm!(
             "out dx, al",
             in("dx") port,
-            in("al") input
+            in("al") input,
+            options(nomem, nostack, preserves_flags)
+
         )
     }
 }
@@ -51,7 +58,9 @@ pub fn out16(port: u16, input: u16) {
         asm!(
             "out dx, ax",
             in("dx") port,
-            in("ax") input
+            in("ax") input,
+            options(nomem, nostack, preserves_flags)
+
         )
     }
 }
@@ -61,7 +70,8 @@ pub fn out32(port: u16, input: u32) {
         asm!(
             "out dx, eax",
             in("dx") port,
-            in("eax") input
+            in("eax") input,
+            options(nomem, nostack, preserves_flags)
         )
     }
 }

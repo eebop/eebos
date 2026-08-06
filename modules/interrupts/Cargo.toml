@@ -1,10 +1,9 @@
 [package]
-name = "pic"
+name = "interrupts"
 version = "0.1.0"
 edition = "2024"
 
 [lib]
-
 
 [profile.release]
 panic = "abort"
@@ -13,5 +12,8 @@ panic = "abort"
 panic = "abort"
 debug = true
 
+
 [dependencies]
 dyshared = { version = "0.1.0", path = "../dyshared" }
+paging = { version = "0.1.0", path = "../paging" }
+pic = { version = "0.1.0", path = "../pic" }

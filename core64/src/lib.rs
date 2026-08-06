@@ -1,20 +1,19 @@
 #![no_std]
 #![no_main]
+
+// writeln! generates these which is very annoying
+#![allow(unused_must_use)]
+
+// TODO: clean these up
+#![allow(unused_imports)]
+
 #![feature(allocator_api)]
 #![feature(ptr_mask)]
-#![feature(alloc_error_handler)]
 #![feature(macro_metavar_expr_concat)]
 
 #![allow(internal_features)]
 #![feature(rustc_attrs)]
-#![feature(ptr_as_ref_unchecked)]
 #![feature(slice_from_ptr_range)]
-#![feature(const_slice_from_ptr_range)]
-#![feature(sync_unsafe_cell)]
-#![feature(generic_const_exprs)]
-
-// Todo: add checks for all the writeln!s
-// #![allow(unused)]
 
 // This symbol is required for an allocator to work with --emit obj in no_std
 // My understanding is that it "tells" the compiler that you know what you're doing
@@ -31,16 +30,14 @@ fn __rust_alloc_error_handler(_: core::alloc::Layout) -> ! {
 #[macro_use]
 extern crate alloc;
 
-use core::{alloc::{GlobalAlloc, Layout}, fmt::{Write}, panic::PanicInfo};
+use core::{alloc::{GlobalAlloc, Layout}, arch::asm, fmt::Write, panic::PanicInfo, mem::transmute};
 use alloc::{alloc::{Global, alloc}, collections::btree_map::BTreeMap};
 use alloc::vec::Vec;
 
 use shared::{bochsdbg, screen::Screen, SysCallInternal};
 use shared::SysCallData;
 
-// mod syscall;
 mod elf;
-// use syscall::STATE;
 
 #[panic_handler]
 fn panic<'a, 'b>(info: &'a PanicInfo<'b>) -> ! {
@@ -77,13 +74,8 @@ unsafe impl GlobalAlloc for SimpleAllocator {
 #[global_allocator]
 static ALLOCATOR: SimpleAllocator = SimpleAllocator;
 
-// Called by other process
-// TODO: with the switch to paging this'll be more difficult
-fn kmalloc(mut data: SysCallData) {
-    let inner: Layout = data.receive_abi();
-    writeln!(Screen::new(), "allocating... {inner:?}");
-    let out = unsafe { alloc(inner) };
-    data.send_abi(out);
+fn make_fncall(ptr: extern "C" fn(*mut u8, *const BTreeMap<&str, &[u8]>) -> !, memptr: *mut u8, elfdata: *const BTreeMap<&str, &[u8]>) -> ! {
+    ptr(memptr, elfdata)
 }
 
 #[unsafe(no_mangle)]
@@ -93,36 +85,21 @@ pub extern "C" fn rustmain(mem: *mut u8) {
         DATAPTR = mem;
         // Every instance of ManualOnceCell must be initialized here
         elf::init_elf_data();
-
     }
-    let mut s = Screen::new();
 
-    s.clear_screen();
-
-
-    let mut proc = elf::load_mod("libtest_mod.so");
+    let proc = elf::load_mod("libtest_mod.so");
     writeln!(Screen::new(), "now here in rustmain");
-    // for ptr in proc.init_fns {
-    //     writeln!(Screen::new(), "here, calling {ptr}");
-    //     let ptr: extern "C" fn() = unsafe { core::mem::transmute(ptr) };
-    //     ptr();
-    // }
-    let ptr = &proc.symbols["main"];
+    let ptr = &proc.symbols["start"];
     let ptr = ptr.1.relocate_ptr(ptr.0.st_value as u32);
-    // for x in 0..10 {
-    //     write!(Screen::new(), "{:x?} ", unsafe{ *ptr.add(x) });
 
-    // }
-    let ptr: extern "C" fn(*mut u8/* *const BTreeMap<&str, &[u8]>*/, u8) = unsafe { core::mem::transmute(ptr) };
-    bochsdbg();
-    ptr(unsafe { DATAPTR }, 1/*, unsafe { &raw const *elf::ELF_DATA.get() }*/);
-    // unsafe {
-    //     for i in 0..10 {
-    //         write!(Screen::new(), "{:x?} ", *ptr.add(i));
-    //     }
-    // }
-    loop {}
+    // writeln!(Screen::new(), "args are: {:?}, {:?}", unsafe { DATAPTR } as usize, &raw const *elf::ELF_DATA.get() as usize);
+    // make_fncall(ptr as usize, unsafe { DATAPTR } as usize, &raw const *elf::ELF_DATA.get() as usize);
+    // unsafe { core::mem::transmute::<_, extern "C" fn(usize, usize) -> !>(ptr)(unsafe { DATAPTR } as usize, &raw const *elf::ELF_DATA.get() as usize) };
+    make_fncall(unsafe { core::mem::transmute(ptr) }, unsafe { DATAPTR }, &raw const *elf::ELF_DATA.get())
 }
+
+
+
 
 #[unsafe(no_mangle)]
 pub extern "C" fn isr_handler(regs: *mut SysCallInternal) {

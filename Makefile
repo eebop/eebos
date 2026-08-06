@@ -3,7 +3,7 @@ AS = i686-elf-as
 NAS = nasm
 RSC = rustc
 
-CFLAGS = -std=gnu23 -ffreestanding -Wall -Wextra -O2
+CFLAGS = -std=gnu23 -ffreestanding -Wall -Wextra -Og -g -fno-omit-frame-pointer
 RSFLAGS = -O --crate-type=bin --emit=obj --target=i686-unknown-linux-gnu -C panic=abort -C lto=true -C code-model=small -C no-redzone=true
 
 QEMUFLAGS = -no-reboot -no-shutdown -debugcon stdio #-d cpu_reset,int
@@ -11,7 +11,7 @@ QEMUFLAGS = -no-reboot -no-shutdown -debugcon stdio #-d cpu_reset,int
 # all filenames to build, minus extension
 srcs = boot kernel stdutils gdt pic ports irq page64 core64 sse
 
-modules = test_mod test_dep paging process dyshared#start_process pic
+modules = test_mod test_dep paging process interrupts pic dyshared#start_process pic
 
 libmod = shared
 
@@ -30,10 +30,13 @@ RSRC = $(foreach f,$(srcs),$(wildcard $f/Cargo.toml))
 OBJMODS = $(addprefix $(builddir)/mods/,$(modules))
 
 kqemu: build/eebos.bin
-	qemu-system-x86_64 -kernel build/eebos.bin $(QEMUFLAGS)
+	qemu-system-i386 -kernel build/eebos.bin $(QEMUFLAGS)
+
+gdb: build/eebos.bin
+	qemu-system-i386 -kernel build/eebos.bin $(QEMUFLAGS) -S -s -serial tcp::4444,server=on
 
 qemu: build/eebos.iso
-	qemu-system-x86_64 -cdrom build/eebos.iso $(QEMUFLAGS)
+	qemu-system-i386 -cdrom build/eebos.iso $(QEMUFLAGS)
 
 bochs: build/eebos.iso
 	bochs -debugger
@@ -54,7 +57,7 @@ build/isodir/boot/eebos.bin: build/eebos.bin
 	cp $< $@
 
 build/eebos.bin: linker.ld $(OBJECTS) $(OBJMODS)
-	i686-elf-gcc -T linker.ld -o $@ -ffreestanding -O2 -nostdlib $(OBJECTS) $(OBJMODS) -z noexecstack -Wl,--gc-sections -Wl,--demangle
+	i686-elf-gcc -T linker.ld -o $@ -ffreestanding -Og -nostdlib $(OBJECTS) $(OBJMODS) -z noexecstack -Wl,--gc-sections -Wl,--demangle -g
 
 
 $(builddir)/%.o: $(srcdir)/%.nasm
@@ -75,29 +78,29 @@ $(builddir)/%.o: $(srcdir)/%.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) $< -c -o $@
 
 core64/target/target/release/deps: core64/src/*.rs $(libmod)/src/*.rs
-	cd core64 ; cargo rustc --release -Zjson-target-spec --target=target.json -Z build-std=core,compiler_builtins,alloc -Z build-std-features=compiler-builtins-mem -- --emit=obj
+	cd core64 ; cargo rustc -Zjson-target-spec --target=target.json -Z build-std=core,compiler_builtins,alloc -Z build-std-features=compiler-builtins-mem -- -Crelocation-model=static
 
 
 $(builddir)/core64.o: core64/target/target/release/deps
 	@mkdir -p build
-	cd core64/target/target/release/deps; for i in *.rlib; do \
+	cd core64/target/target/debug/deps; for i in *.rlib; do \
 		mkdir -p $${i%.rlib}; cd $${i%.rlib}; ar x ../$$i; \
 		ar r ../../libcore64.rlib *; \
 		cd ..; \
 	done
-	cp core64/target/target/release/libcore64.rlib $@
+	cp core64/target/target/debug/libcore64.rlib $@
 
 
 $(builddir)/mods/test_mod.so: modules/test_mod/src/lib.rs modules/*/src/*.rs
 	@mkdir -p build/mods
-	cd modules/test_mod; RUSTFLAGS="-Cno-redzone=true" cargo build --release --target=i686-unknown-linux-gnu -Z build-std=core,compiler_builtins,alloc -Z build-std-features=compiler-builtins-mem
+	cd modules/test_mod; RUSTFLAGS="-Cno-redzone=true -Crelocation-model=pic" cargo build --target=i686-unknown-linux-gnu -Z build-std=core,compiler_builtins,alloc -Z build-std-features=compiler-builtins-mem
 
-	cp modules/test_mod/target/i686-unknown-linux-gnu/release/libtest_mod.so $@
+	cp modules/test_mod/target/i686-unknown-linux-gnu/debug/libtest_mod.so $@
 
 
 $(builddir)/mods/%.so: modules/%/src/lib.rs modules/%/src/*.rs build/mods/test_mod.so
 	@mkdir -p build/mods
-	cp modules/test_mod/target/i686-unknown-linux-gnu/release/lib$*.so $@
+	cp modules/test_mod/target/i686-unknown-linux-gnu/debug/lib$*.so $@
 
 
 $(builddir)/mods/%: $(builddir)/mods/%.so
@@ -113,5 +116,5 @@ clean:
 		pwd=$$(pwd); \
 		cd $$i; cargo clean ; cd $$pwd; \
 	done;
-	-rm -r core64/target/target/release/deps
-	-rm core64/target/target/release/libcore64.rlib
+	-rm -r core64/target/target/debug/deps
+	-rm core64/target/target/debug/libcore64.rlib

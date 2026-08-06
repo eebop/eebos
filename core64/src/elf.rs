@@ -2,8 +2,8 @@ use core::{cell::RefCell, cmp, fmt::{Debug, Write}, ops::Range, result};
 
 use alloc::{alloc::{Allocator, Global}, borrow::ToOwned, boxed::Box, collections::{btree_map::BTreeMap, btree_set::BTreeSet}, fmt::format, rc::Rc, slice, string::{ParseError, String, ToString}, vec::Vec};
 
-use elf::{ElfBytes, abi::STB_GLOBAL, dynamic::DynamicTable, endian::{AnyEndian, EndianParse}, segment::ProgramHeader, string_table::StringTable, symbol::{self, Symbol, SymbolTable}};
-use shared::{Interface, SysCallData, process::{Page, PageAligned, Process}, screen::Screen, std::{DummyAllocator, ManualOnceCell}};
+use elf::{ElfBytes, abi::{STB_GLOBAL, STB_WEAK}, dynamic::DynamicTable, endian::{AnyEndian, EndianParse}, segment::ProgramHeader, string_table::StringTable, symbol::{self, Symbol, SymbolTable}};
+use shared::{Interface, SysCallData, process::{Page, PageAligned, Process}, screen::{Com1, Screen}, std::{DummyAllocator, ManualOnceCell}};
 
 
 macro_rules! elf_data {
@@ -26,10 +26,11 @@ macro_rules! elf_map {
     };
 }
 
-const _ELF_DATA: &'static [(&'static str, Range<*mut u8>)] = &elf_map!(test_mod, test_dep, process, paging, dyshared);
+const _ELF_DATA: &'static [(&'static str, Range<*mut u8>)] = &elf_map!(test_mod, test_dep, process, paging, interrupts, pic, dyshared);
 
 pub static ELF_DATA: ManualOnceCell<BTreeMap<&str, &[u8]>> = ManualOnceCell::new();
 
+#[inline(never)]
 pub fn init_elf_data() {
     let mut data = BTreeMap::<&str, &[u8]>::new();
     for entry in _ELF_DATA {
@@ -39,11 +40,6 @@ pub fn init_elf_data() {
     }
     unsafe { ELF_DATA.init(data) };
 }
-
-// pub fn load_syscall(mut info: SysCallData) {
-//     let out = string_elf(info.receive_abi(), DummyAllocator);
-//     info.send_abi(out);
-// }
 
 pub struct Module {
     pub allocations: Vec<Box<[Page]>>,
@@ -57,13 +53,15 @@ pub fn load_mod(name: &str) -> Module {
     let mut all: BTreeMap<&str, SOChunk> = BTreeMap::new();
     let mut leaves: BTreeSet<&str> = BTreeSet::new();
     leaves.insert(name);
-
     while let Some(leaf) = leaves.pop_first() {
-        let chunk = string_elf(leaf);
+        let chunk: SOChunk<'_> = string_elf(leaf);
         for edge in &chunk.needed {
-            leaves.insert(*edge);
+            if !all.contains_key(edge) {
+                leaves.insert(*edge);
+            }
         }
         all.insert(leaf, chunk);
+
     }
 
     let mut output: Vec<&str> = Vec::new();
@@ -79,6 +77,21 @@ pub fn load_mod(name: &str) -> Module {
     }
     writeln!(Screen::new(), "order is: (last first) {output:?}");
     let mut symbols: BTreeMap<&str, (Symbol, Relocation)> = BTreeMap::new();
+
+    unsafe extern "C" {
+        safe static stack_top: *mut ();
+    };
+    // Pass the stack through very hackily
+    symbols.insert("stack_top", (Symbol {
+        st_info: 0,
+        st_name: 0,
+        st_shndx: 0,
+        st_other: 0,
+        st_value: stack_top as u64,
+        st_size: 0,
+
+    }, Relocation {original_baseaddr: 0, new_baseaddr: core::ptr::null_mut()}));
+
     let mut init_fns = Vec::new();
     let mut fini_fns = Vec::new();
     let mut allocations = Vec::new();
@@ -97,9 +110,9 @@ pub fn load_mod(name: &str) -> Module {
 
 }
 
-fn string_elf(name: &str) -> SOChunk {
+fn string_elf(name: &str) -> SOChunk<'_> {
     let data = *ELF_DATA.get().get(name).unwrap_or_else(|| panic!("Invalid elf: \"{}\". Valid are {:?}", name, ELF_DATA.get().keys()));
-    parse_elf(data).unwrap()
+    parse_elf(name, data).unwrap()
 }
 
 fn reinterpret_slice<T, U>(i: &[T]) -> Result<&[U], IntepretError> {
@@ -126,6 +139,7 @@ fn reinterpret_slice_mut<T, U>(i: &mut [T]) -> Result<&mut [U], IntepretError> {
     }
 }
 
+#[allow(unused)] // Debug impl is where these are used
 #[derive(Debug)]
 enum IntepretError {
     Parse(elf::ParseError),
@@ -150,8 +164,8 @@ struct Rel32 {
 }
 
 enum RelocSize {
-    Word8,
-    Word16,
+    // Word8,
+    // Word16,
     Word32
 }
 
@@ -379,7 +393,7 @@ struct SOChunk<'data> {
     baseaddr: Relocation
 }
 
-fn parse_elf(code: &[u8]) -> Result<SOChunk, IntepretError> {
+fn parse_elf<'a>(name: &str, code: &'a [u8]) -> Result<SOChunk<'a>, IntepretError> {
     let file = ElfBytes::<AnyEndian>::minimal_parse(code)?;
 
     let x = file.segments().expect("Can't get segments!");
@@ -458,8 +472,10 @@ fn parse_elf(code: &[u8]) -> Result<SOChunk, IntepretError> {
 
     let new_earliest = owned_data.as_ptr() as usize; 
 
-
     let array = owned_data.as_contiguous();
+
+    writeln!(Screen::new(), "owned_data ranges from {:x?} to {:x?}.", new_earliest, new_earliest + array.len());
+
 
     for header in loads {
         let start = header.p_vaddr as usize - earliest as usize;
@@ -498,6 +514,24 @@ fn parse_elf(code: &[u8]) -> Result<SOChunk, IntepretError> {
     let (dynsymtab, dynstrtab) = file.dynamic_symbol_table()?.ok_or(IntepretError::MistargetedElf("No dyn symbol table".to_string()))?;
 
     let relocation = Relocation {original_baseaddr: earliest as u32, new_baseaddr: new_earliest as *mut u8};
+
+    let txt = file.section_header_by_name(".text").unwrap().expect("no .text");
+    
+    let (Some(headers), Some(htab)) = file.section_headers_with_strtab().unwrap() else {
+        panic!("Unable to find sections for debugging");
+    };
+
+
+    write!(Com1, "add-symbol-file modules/test_mod/target/i686-unknown-linux-gnu/debug/{} -readnow 0x{:x}", name, relocation.relocate_ptr(txt.sh_addr as u32) as u32);
+    for header in headers {
+        let name = htab.get(header.sh_name as usize).unwrap();
+        if name != ".text" && name != "" {
+            let val = relocation.relocate_ptr(header.sh_addr as u32) as u32;
+            write!(Com1, " -s {} 0x{:x}", name, val);
+        }
+    }
+    writeln!(Com1, "");
+
 
     Ok(SOChunk {
         init_fns: dyn_data.init_fns,
@@ -561,52 +595,55 @@ fn relocate_mod<'data>(chunk: &mut SOChunk<'data>, symbols: &mut BTreeMap<&'data
                 let addend: [u8; 4]  = get_bytes_at_symbol(data, ptr);
                 let addend: u32 = u32::from_le_bytes(addend);
 
+                let get_this =
+                    || chunk.dynsymtab.get(reloc.get_symbol() as usize);
+
                 let get_name =
-                    || chunk.dynsymtab.get(reloc.get_symbol() as usize)
-                    .map(|symbol| chunk.dynstrtab.get(symbol.st_name as usize))
-                    .flatten();
+                    || get_this().map(
+                        |symbol| chunk.dynstrtab.get(symbol.st_name as usize)
+                    ).flatten();
 
                 let get_symbol = 
-                    || chunk.dynsymtab.get(reloc.get_symbol() as usize)
-                    .map(|symbol| chunk.dynstrtab.get(symbol.st_name as usize)
-                        // If there is a known one, use that, otherwise use our UND
-                        .map(|name| symbols.get(name).cloned().unwrap_or((symbol, chunk.baseaddr))))
-                    .flatten();
+                    || get_name()
+                        // If there is a known one, use that
+                        // If our UND is weak we can use that
+                        .map(|name| symbols.get(name).cloned())
+                        .map(|data| get_this().map(|this|
+                            data.or(if this.st_bind() == elf::abi::STB_WEAK { Some((this, chunk.baseaddr)) } else {None})))
+                        .flatten();
                 // writeln!(Screen::new(), "now relocating... {:?}", reloc);
 
                 let result = match reloc.get_type() {
                     // R_386_32
                     1 => {
-                        let val = get_symbol()?;
-                        writeln!(Screen::new(), "R_386_32 {}", get_name()?);
-                        if val.0.is_undefined() && val.0.st_bind() != elf::abi::STB_WEAK {
+                        // writeln!(Screen::new(), "R_386_32 {}", get_name()?);
+
+                        let Some(val) = get_symbol()? else {
                             return Err(IntepretError::InvalidElfState(format!("Symbol missing: {}", get_name()?)));
-                        }
+                        };
                         unsafe { val.1.relocate_ptr(val.0.st_value as u32).add(addend as usize) }
                     }
                     // R_386_GLOB_DAT
                     6 => {
-                        let val = get_symbol()?;
-                        writeln!(Screen::new(), "R_386_GLOB_DAT {}", get_name()?);
-                        if val.0.is_undefined() && val.0.st_bind() != elf::abi::STB_WEAK {
+                        // writeln!(Screen::new(), "R_386_GLOB_DAT {}", get_name()?);
+                        let Some(val) = get_symbol()? else {
                             return Err(IntepretError::InvalidElfState(format!("Symbol missing: {}", get_name()?)));
-                        }
+                        };
                         val.1.relocate_ptr(val.0.st_value as u32)
                     },
                     // R_386_JUMP_SLOT
                     7 => {
                         // Same as GLOB_DAT but we can lazy link
                         // We don't because that's harder
-                        let val = get_symbol()?;
-                        writeln!(Screen::new(), "R_386_JUMP_SLOT {}", get_name()?);
-                        if val.0.is_undefined() && val.0.st_bind() != elf::abi::STB_WEAK {
+                        // writeln!(Screen::new(), "R_386_JUMP_SLOT {}", get_name()?);
+                        let Some(val) = get_symbol()? else {
                             return Err(IntepretError::InvalidElfState(format!("Symbol missing: {}", get_name()?)));
-                        }
+                        };
                         val.1.relocate_ptr(val.0.st_value as u32)
                     }
                     // R_386_RELATIVE
                     8 => {
-                        writeln!(Screen::new(), "R_386_RELATIVE");
+                        // writeln!(Screen::new(), "R_386_RELATIVE");
                         unsafe { chunk.baseaddr.new_baseaddr.sub(chunk.baseaddr.original_baseaddr as usize).add(addend as usize) }
                     }
                     
@@ -614,7 +651,6 @@ fn relocate_mod<'data>(chunk: &mut SOChunk<'data>, symbols: &mut BTreeMap<&'data
                 };
                 set_bytes_at_symbol(data, ptr, result)?
             }
-            _ => panic!()
         }
     }
     

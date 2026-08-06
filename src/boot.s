@@ -68,6 +68,8 @@ _start:
 	*/
 	mov $stack_top, %esp
 
+	xor %ebp, %ebp
+
 	/*
 	This is a good place to initialize crucial processor state before the
 	high-level kernel is entered. It's best to minimize the early

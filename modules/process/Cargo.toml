@@ -4,16 +4,17 @@ version = "0.1.0"
 edition = "2024"
 
 [lib]
-crate-type = ["dylib"]
 
 [profile.release]
 panic = "abort"
 
 [profile.dev]
 panic = "abort"
+debug = true
 
 
 [dependencies]
 dyshared = { version = "0.1.0", path = "../dyshared" }
 elf = { version = "0.8.0", default-features = false, features = ["alloc", "to_str"] }
 paging = { version = "0.1.0", path = "../paging" }
+rangemap = { version = "1.7.1", default-features = false, features = ["const_fn", "nightly"] }

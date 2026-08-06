@@ -2,6 +2,12 @@
 #![feature(allocator_api)]
 #![feature(trait_alias)]
 
+// writeln! generates these which is very annoying
+#![allow(unused_must_use)]
+
+// TODO: clean these up
+#![allow(unused_imports)]
+
 extern crate alloc;
 
 pub mod ports;
@@ -15,9 +21,16 @@ use crate::screen::Screen;
 
 use core::fmt::Write;
 
+#[unsafe(no_mangle)]
+#[inline(never)]
+fn rmpanic_mark() {
+
+}
+
 #[panic_handler]
 fn panic<'a, 'b>(pi: &'a PanicInfo<'b>) -> ! {
-    writeln!(Screen::new(), "{}", pi);
+    writeln!(Screen, "{}", pi);
+    rmpanic_mark();
     loop {}
 }
 

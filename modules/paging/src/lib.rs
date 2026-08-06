@@ -8,6 +8,12 @@
 #![feature(ptr_mask)]
 #![feature(never_type)]
 
+// writeln! generates these which is very annoying
+#![allow(unused_must_use)]
+
+// TODO: clean these up
+#![allow(unused_imports)]
+
 extern crate alloc;
 
 use core::{error::Error, fmt::Debug};
@@ -46,7 +52,7 @@ impl PageToken {
 }
 
 /// Translates linear addresses to physical ones
-pub trait TransToPhys {
+pub trait TransToPhys : Debug {
     type MapError: Error;
 
     // None if the linear address has no physical mapping
@@ -60,12 +66,13 @@ pub trait TransToPhys {
 }
 
 ///
-pub trait MappedPageAllocator {
-    type A: Allocator;
+pub trait MappedPageAllocator : Debug {
+    type A: CAllocator;
     type T: TransToPhys;
+    type MapError: Error;
 
-    fn allocate_page(&mut self, loc: *mut Page, page_type: PageType) -> Result<Box<Page, Self::A>, impl Error>;
-    fn allocate_many(&mut self, loc: *mut Page, page_type: PageType, size: usize) -> Result<Box<[Page], Self::A>, impl Error>;
+    fn allocate_page(&mut self, loc: *mut Page, page_type: PageType) -> Result<Box<Page, Self::A>, Self::MapError>;
+    fn allocate_many<I: Iterator<Item=*mut Page>>(&mut self, loc: I, len: usize, page_type: PageType) -> Result<Box<[Page], Self::A>, Self::MapError>;
 }
 
 // TODO: at some point we'll want to be able to drop pages
@@ -94,7 +101,9 @@ pub trait PageMap<Alloc: CAllocator> : Clone + TransToPhys {
     unsafe fn build(&mut self, token: PageToken) -> PageToken;
 }
 
+#[derive(Debug)]
 pub struct IdentityMap;
+
 impl TransToPhys for IdentityMap {
     type MapError = !;
 

@@ -339,6 +339,7 @@ impl<A: Error, B: Error> Display for MapAllocErr<A, B> {
 
 impl<A: Error, B: Error> Error for MapAllocErr<A, B> {}
 
+#[derive(Debug)]
 pub struct PageAllocator32<'table, PA: CAllocator, DA: CAllocator, T: TransToPhys> {
     inner: &'table mut PageMap32<PA>,
     perms: Permission,
@@ -358,7 +359,8 @@ impl<'a, PA: CAllocator, DA: CAllocator, T: TransToPhys> PageAllocator32<'a, PA,
 impl<'a, PA: CAllocator, DA: CAllocator, T: TransToPhys> MappedPageAllocator for PageAllocator32<'a, PA, DA, T> {
     type A = DA;
     type T = T;
-    fn allocate_page(&mut self, loc: *mut Page, page_type: PageType) -> Result<Box<Page, Self::A>, MapAllocErr<T::MapError, <PageMap32<PA> as TransToPhys>::MapError>> {
+    type MapError = MapAllocErr<T::MapError, <PageMap32<PA> as TransToPhys>::MapError>;
+    fn allocate_page(&mut self, loc: *mut Page, page_type: PageType) -> Result<Box<Page, Self::A>, Self::MapError> {
         let mut val = Page::try_uninit_box(self.a.clone()).map_err(MapAllocErr::AllocError)?;
         let phys = self.curr_map.trans_page(&raw mut *val).map_err(MapAllocErr::TransError)?;
         // assert!(matches!(self.strat, AllocationStrategy::Kernel));
@@ -366,13 +368,14 @@ impl<'a, PA: CAllocator, DA: CAllocator, T: TransToPhys> MappedPageAllocator for
         Ok(val)
     }
 
-    fn allocate_many(&mut self, loc: *mut Page, page_type: PageType, size: usize) -> Result<Box<[Page], Self::A>, MapAllocErr<T::MapError, <PageMap32<PA> as TransToPhys>::MapError>> {
-        let mut val = Page::try_uninit_many(size, self.a.clone()).map_err(MapAllocErr::AllocError)?;
-        let phys = self.curr_map.trans_page(&raw mut val[0]).map_err(MapAllocErr::TransError)?;
-        // assert!(matches!(self.strat, AllocationStrategy::Kernel));
-        self.inner.insert_many(loc, phys, size, page_type, self.perms).map_err(MapAllocErr::MapError)?;
-        // let out_ptr = self.curr_ptr;
-        // self.curr_ptr = unsafe { self.curr_ptr.add(size) };
+    fn allocate_many<I: Iterator<Item=*mut Page>>(&mut self, locs: I, len: usize, page_type: PageType) -> Result<Box<[Page], Self::A>, Self::MapError> {
+        let mut val = Page::try_uninit_many(len, self.a.clone()).map_err(MapAllocErr::AllocError)?;
+        for (ind, page) in locs.enumerate() {
+            assert_eq!(page as usize & 0xFFF, 0);
+            let phys = self.curr_map.trans_page(&raw mut val[ind]).map_err(MapAllocErr::TransError)?;
+            writeln!(Screen, "phys inserted: {:#?} -> {:#?}", page, phys);
+            self.inner.insert_phys(page, phys, page_type, self.perms).map_err(MapAllocErr::MapError)?;
+        }
         Ok(val)
     }
 }
