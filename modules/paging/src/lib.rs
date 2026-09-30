@@ -2,7 +2,6 @@
 #![feature(negative_impls)]
 #![feature(const_trait_impl)]
 #![feature(const_default)]
-#![feature(new_range_api)]
 #![feature(allocator_api)]
 #![allow(refining_impl_trait)]
 #![feature(ptr_mask)]
@@ -19,7 +18,7 @@ extern crate alloc;
 use core::{error::Error, fmt::Debug};
 
 use alloc::{alloc::Allocator, boxed::Box};
-use dyshared::{CAllocator, Page};
+use dyshared::{CAllocator, Page, SimpleAllocator};
 
 // TODO: with multiple targets, cfgs will be necessary
 pub mod page32;
@@ -50,6 +49,8 @@ impl PageToken {
         Self(())
     }
 }
+
+impl !Sync for PageToken {}
 
 /// Translates linear addresses to physical ones
 pub trait TransToPhys : Debug {
@@ -98,8 +99,10 @@ pub trait PageMap<Alloc: CAllocator> : Clone + TransToPhys {
         }
         Ok(())
     }
-    unsafe fn build(&mut self, token: PageToken) -> PageToken;
+    unsafe fn build(&self, token: PageToken) -> PageToken;
 }
+
+pub type PM = page32::PageMap32<SimpleAllocator>;
 
 #[derive(Debug)]
 pub struct IdentityMap;

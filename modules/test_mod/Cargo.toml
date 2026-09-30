@@ -3,8 +3,6 @@ name = "test_mod"
 version = "0.1.0"
 edition = "2024"
 
-[lib]
-
 [profile.release]
 panic = "abort"
 
@@ -18,3 +16,4 @@ dyshared = { version = "0.1.0", path = "../dyshared" }
 process = { version = "0.1.0", path = "../process" }
 test_dep = { version = "0.1.0", path = "../test_dep" }
 interrupts = { version = "0.1.0", path = "../interrupts" }
+pic = { version = "0.1.0", path = "../pic" }

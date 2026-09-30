@@ -15,7 +15,7 @@ modules = test_mod test_dep paging process interrupts pic dyshared#start_process
 
 libmod = shared
 
-builddir = build
+builddir = $(abspath build)
 
 srcdir = src
 
@@ -27,7 +27,7 @@ CSRC = $(foreach f,$(srcs:%=%.c),$(wildcard src/$f))
 
 RSRC = $(foreach f,$(srcs),$(wildcard $f/Cargo.toml))
 
-OBJMODS = $(addprefix $(builddir)/mods/,$(modules))
+# OBJMODS = $(addprefix $(builddir)/mods/,$(modules))
 
 kqemu: build/eebos.bin
 	qemu-system-i386 -kernel build/eebos.bin $(QEMUFLAGS)
@@ -56,8 +56,8 @@ build/isodir/boot/eebos.bin: build/eebos.bin
 	@mkdir -p build/isodir/boot
 	cp $< $@
 
-build/eebos.bin: linker.ld $(OBJECTS) $(OBJMODS)
-	i686-elf-gcc -T linker.ld -o $@ -ffreestanding -Og -nostdlib $(OBJECTS) $(OBJMODS) -z noexecstack -Wl,--gc-sections -Wl,--demangle -g
+build/eebos.bin: linker.ld $(OBJECTS)
+	i686-elf-gcc -T linker.ld -o $@ -ffreestanding -Og -nostdlib $(OBJECTS) -z noexecstack -Wl,--gc-sections -Wl,--demangle -g
 
 
 $(builddir)/%.o: $(srcdir)/%.nasm
@@ -77,34 +77,27 @@ $(builddir)/%.o: $(srcdir)/%.c
 	mkdir -p $(dir $@)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $< -c -o $@
 
-core64/target/target/release/deps: core64/src/*.rs $(libmod)/src/*.rs
+core64/target/target/debug/libcore64.a: core64/src/*.rs $(libmod)/src/*.rs $(builddir)/mods/test_mod
 	cd core64 ; cargo rustc -Zjson-target-spec --target=target.json -Z build-std=core,compiler_builtins,alloc -Z build-std-features=compiler-builtins-mem -- -Crelocation-model=static
 
 
-$(builddir)/core64.o: core64/target/target/release/deps
+$(builddir)/core64.o: core64/target/target/debug/libcore64.a
 	@mkdir -p build
-	cd core64/target/target/debug/deps; for i in *.rlib; do \
-		mkdir -p $${i%.rlib}; cd $${i%.rlib}; ar x ../$$i; \
-		ar r ../../libcore64.rlib *; \
-		cd ..; \
-	done
-	cp core64/target/target/debug/libcore64.rlib $@
+	cp -f core64/target/target/debug/libcore64.a $@
+
+$(builddir)/mods/passthrough/libpassthrough.so: modules/passthrough/passthrough.c
+	@mkdir -p $(builddir)/mods/passthrough
+	clang $< -shared -fPIC -o $@ -nostdlib --target=i386-unknown-none
 
 
-$(builddir)/mods/test_mod.so: modules/test_mod/src/lib.rs modules/*/src/*.rs
+$(builddir)/mods/test_mod: $(builddir)/mods/passthrough/libpassthrough.so modules/test_mod/src/main.rs modules/*/src/*.rs
 	@mkdir -p build/mods
-	cd modules/test_mod; RUSTFLAGS="-Cno-redzone=true -Crelocation-model=pic" cargo build --target=i686-unknown-linux-gnu -Z build-std=core,compiler_builtins,alloc -Z build-std-features=compiler-builtins-mem
-
-	cp modules/test_mod/target/i686-unknown-linux-gnu/debug/libtest_mod.so $@
-
-
-$(builddir)/mods/%.so: modules/%/src/lib.rs modules/%/src/*.rs build/mods/test_mod.so
-	@mkdir -p build/mods
-	cp modules/test_mod/target/i686-unknown-linux-gnu/debug/lib$*.so $@
+	cd modules/test_mod; RUSTFLAGS="-Cno-redzone=true -Crelocation-model=pie -L$(builddir)/mods/passthrough -l passthrough" cargo rustc --target=i686-unknown-linux-gnu -Z build-std=core,compiler_builtins,alloc -Z build-std-features=compiler-builtins-mem --release -- -Clink-args="-nostdlib -Wl,--no-dynamic-linker"
+	cp modules/test_mod/target/i686-unknown-linux-gnu/release/test_mod $@
 
 
-$(builddir)/mods/%: $(builddir)/mods/%.so
-	i686-elf-objcopy -I binary -O elf32-i386 --binary-symbol-prefix=_binary_$* $< $@ 
+# $(builddir)/mods/%: $(builddir)/mods/%.so
+# 	i686-elf-objcopy -I binary -O elf32-i386 --binary-symbol-prefix=_binary_$* $< $@ 
 
 makefile.deps: $(HEADERS) $(CSRC)
 	$(CC) -MM $(CSRC) > makefile.deps
@@ -116,5 +109,5 @@ clean:
 		pwd=$$(pwd); \
 		cd $$i; cargo clean ; cd $$pwd; \
 	done;
-	-rm -r core64/target/target/debug/deps
+	cd core64; cargo clean
 	-rm core64/target/target/debug/libcore64.rlib

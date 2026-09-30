@@ -196,20 +196,20 @@ void kernel_main(void)
 
 	IRQ_clear_mask(2);
 
-	lidt(idtarray, 256 * 8 - 1);
+	// lidt(idtarray, 256 * 8 - 1);
 	
-	printf("Interrupts: %x\n", are_interrupts_enabled());
+	// printf("Interrupts: %x\n", are_interrupts_enabled());
 
 	// init_pages();
 
-	printf("lgdt2\n");
+	// printf("lgdt2\n");
 	uint8_t* ptr = malloc(0);
-	printf("ptr is %x\n", ptr);
+	// printf("ptr is %x\n", ptr);
 
-    asm volatile (
+    // asm volatile (
     //     ".global main64\n"
 	// 	".global rustmain\n"
-		"xchgw %bx, %bx\n"
+		// "xchgw %bx, %bx\n"
 
 
     //     "jmp $0x18, $main64\n"
@@ -229,7 +229,7 @@ void kernel_main(void)
     //     //     [cs] "g" (cs)
     //         // [rip] "g" (rip)
     //     : "rax"
-    );
+    // );
 
 
 	rustmain(ptr);

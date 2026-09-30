@@ -1,6 +1,6 @@
 extern crate dyshared;
 
-use alloc::{alloc::{AllocError, Allocator, Global}, boxed::Box, rc::Rc};
+use alloc::{alloc::{AllocError, Allocator, Global}, boxed::Box, sync::Arc};
 
 // use rangemap::{RangeInclusiveMap, RangeMap, StepFns};
 use dyshared::{CAllocator, Page, screen::Screen};
@@ -201,10 +201,10 @@ impl<A: Allocator + Clone> Drop for PageTable<A> {
 
 
 #[derive(Clone, Debug)]
-struct PageDirectory<A: Allocator + Clone> {
+struct PageDirectory<A: CAllocator> {
     // SAFETY: raw and repr must remain in sync
     raw: Pin<Box<TableData, A>>,
-    repr: [Option<Rc<PageTable<A>, A>>; 1024],
+    repr: [Option<Arc<PageTable<A>, A>>; 1024],
     a: A
 }
 
@@ -216,7 +216,7 @@ struct PageDirectory<A: Allocator + Clone> {
 //     }
 // }
 
-impl<A: Allocator + Clone> PageDirectory<A> {
+impl<A: CAllocator> PageDirectory<A> {
     fn new_in(a: A) -> Self {
         let raw = unsafe { Pin::new_unchecked(Box::new_in(TableData::default(), a.clone())) };
         Self {
@@ -232,8 +232,8 @@ impl<A: Allocator + Clone> PageDirectory<A> {
 
         let val  = self.repr.get_mut(addr)
             .unwrap(); // Unwrap cannot fail as max value of u10 is 1023
-        let val = val.get_or_insert_with(|| Rc::new_in(PageTable::new_in(self.a.clone()), self.a.clone()));
-        let val =         Rc::make_mut(val);
+        let val = val.get_or_insert_with(|| Arc::new_in(PageTable::new_in(self.a.clone()), self.a.clone()));
+        let val =         Arc::make_mut(val);
         unsafe {
             let item = Page32Element::new_exists(val.raw.get_ptr(), false, false, false, false, false, true, true, true);
             self.raw.set_item(addr, item);
@@ -259,7 +259,7 @@ pub struct PageMap32<A: CAllocator> {
 
 impl<PA: CAllocator> TransToPhys for PageMap32<PA> {
     type MapError = PageError;
-    fn trans_page(&self, addr: *mut Page) -> Result<*mut Page, Self::MapError> {
+    fn trans_page(&self, _addr: *mut Page) -> Result<*mut Page, Self::MapError> {
         todo!()
     }
 }
@@ -307,7 +307,7 @@ impl<PA: CAllocator> PageMap<PA> for PageMap32<PA> {
         PageAllocator32::new(self, perms, a, curr_map)
    }
 
-   unsafe fn build(&mut self, _: PageToken) -> PageToken {
+   unsafe fn build(&self, _: PageToken) -> PageToken {
     let ptr = &raw const *self.inner.raw;
     unsafe { 
         asm!(

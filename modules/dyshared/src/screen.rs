@@ -1,4 +1,5 @@
 use core::fmt;
+use core::fmt::Write;
 use core::slice;
 
 use crate::ports::out8;
@@ -48,7 +49,7 @@ impl Screen {
     }
 
     pub fn write_byte(&mut self, c: u8) {
-        let color = VgaColor::make_color(VgaColor::LightGrey, VgaColor::Black);
+        let color: u8 = VgaColor::make_color(VgaColor::LightGrey, VgaColor::Black);
         let screen: &mut [u16] = unsafe {
             slice::from_raw_parts_mut(0xB8000 as *mut u16, 25 * 80)
         };

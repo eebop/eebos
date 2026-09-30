@@ -1,6 +1,14 @@
 #![no_std]
 #![feature(pointer_is_aligned_to)]
 #![feature(allocator_api)]
+#![feature(unsafe_cell_access)]
+#![feature(never_type)]
+
+// writeln! generates these which is very annoying
+#![allow(unused_must_use)]
+
+// TODO: clean these up
+#![allow(unused_imports)]
 
 extern crate alloc;
 
@@ -11,8 +19,11 @@ use paging;
 
 use core::fmt::Write;
 
-mod tasks;
 mod idt;
+mod single_threaded;
+// mod mutex;
+mod interrupts;
+pub mod runtime;
 
 // pub enum InterruptType {
 //     ClockEvent
@@ -31,15 +42,24 @@ mod idt;
 pub fn test<A: CAllocator + 'static>(a: A) {
     idt::init_interrupts(a);
 
+    unsafe extern "C" {
+        safe static stack_top: u8;
+    }
+
+    writeln!(Screen, "stack_top is {:?}", &raw const stack_top);
+
     bochsdbg();
     unsafe {
         asm!(
-            "int 3"
+            "xchg bx, bx",
+            "int 3",
+            "xchg bx, bx",
         )
     }
     
     writeln!(Screen, "here after interrupt");
 
+    // panic!();
     loop {}
     
 }

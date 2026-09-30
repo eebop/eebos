@@ -59,62 +59,62 @@ impl<'a> PageAligned<'a> for &'a mut [Page] {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct Process<A: Allocator + Clone, B: Allocator + Clone> {
-    pub got_ptr: *mut [u32],
-    pub _start: extern "C" fn() -> !,
-    pub owned_data: Rc<RefCell<[Box<[Page], A>]>, A>,
-    pub stacks: Vec<Rc<RefCell<Box<[Page], B>>, B>, B>
-}
+// #[derive(Debug, Clone)]
+// pub struct Process<A: Allocator + Clone, B: Allocator + Clone> {
+//     pub got_ptr: *mut [u32],
+//     pub _start: extern "C" fn() -> !,
+//     pub owned_data: Rc<RefCell<[Box<[Page], A>]>, A>,
+//     pub stacks: Vec<Rc<RefCell<Box<[Page], B>>, B>, B>
+// }
 
-impl<A: Allocator + Clone, B: Allocator + Clone> Process<A, B> {
-    pub fn new(got_ptr: *mut [u32], _start: extern "C" fn() -> !, owned_data: Rc<RefCell<[Box<[Page], A>]>, A>, b: B) -> Self {
-        Self {
-            got_ptr: got_ptr,
-            _start: _start,
-            owned_data: owned_data,
-            stacks: Vec::new_in(b)
-        }
-    }
-    pub fn new_stack(&mut self, alloc: B) -> Rc<RefCell<Box<[Page], B>>, B> {
+// impl<A: Allocator + Clone, B: Allocator + Clone> Process<A, B> {
+//     pub fn new(got_ptr: *mut [u32], _start: extern "C" fn() -> !, owned_data: Rc<RefCell<[Box<[Page], A>]>, A>, b: B) -> Self {
+//         Self {
+//             got_ptr: got_ptr,
+//             _start: _start,
+//             owned_data: owned_data,
+//             stacks: Vec::new_in(b)
+//         }
+//     }
+//     pub fn new_stack(&mut self, alloc: B) -> Rc<RefCell<Box<[Page], B>>, B> {
 
-        let data = Rc::new_in(RefCell::new(Page::uninit_many(4, alloc.clone())), alloc.clone());
+//         let data = Rc::new_in(RefCell::new(Page::uninit_many(4, alloc.clone())), alloc.clone());
 
-        self.stacks.push(data.clone());
+//         self.stacks.push(data.clone());
         
-        data
-    }
+//         data
+//     }
 
-    pub fn try_own_none<C: Allocator + Clone>(self, alloc: C) -> Result<Process<A, C>, Process<A, B>> {
-        let 0 = self.stacks.len() else {
-            return Err(self);
-        };
-        Ok(Process { got_ptr: self.got_ptr, _start: self._start, owned_data: self.owned_data, stacks: Vec::new_in(alloc) })
-    }
+//     pub fn try_own_none<C: Allocator + Clone>(self, alloc: C) -> Result<Process<A, C>, Process<A, B>> {
+//         let 0 = self.stacks.len() else {
+//             return Err(self);
+//         };
+//         Ok(Process { got_ptr: self.got_ptr, _start: self._start, owned_data: self.owned_data, stacks: Vec::new_in(alloc) })
+//     }
 
-    pub fn make_fncall(&mut self, _start: extern "C" fn() -> !, stack_allocator: B) -> ! {
-        let ptr = {
-            // TODO: Initialization is more complex if you have argv that isn't empty
-            let mut stack = self.new_stack(stack_allocator);
-            let mut borrow = stack.borrow_mut();
-            let mut data = borrow.as_contiguous();
+//     pub fn make_fncall(&mut self, _start: extern "C" fn() -> !, stack_allocator: B) -> ! {
+//         let ptr = {
+//             // TODO: Initialization is more complex if you have argv that isn't empty
+//             let mut stack = self.new_stack(stack_allocator);
+//             let mut borrow = stack.borrow_mut();
+//             let mut data = borrow.as_contiguous();
 
-            let size = data.len();
-            assert!(size == 0x4000);
-            data[size-16..size].fill(0); // this sets up argv, argc, envp. all 0
-            unsafe { data.as_mut_ptr().add(size - 16) }
-        };
+//             let size = data.len();
+//             assert!(size == 0x4000);
+//             data[size-16..size].fill(0); // this sets up argv, argc, envp. all 0
+//             unsafe { data.as_mut_ptr().add(size - 16) }
+//         };
 
 
-        // ESP must point to the top of our stack
-        // EDX should point to the atexit() function (not yet implemented)
-        unsafe { asm!(
-            "mov esp, {ptr}",
-            "call {_start}",
-            ptr = in(reg) ptr,
-            _start = in(reg) _start,
-            options(noreturn)
-        )}
-    }
+//         // ESP must point to the top of our stack
+//         // EDX should point to the atexit() function (not yet implemented)
+//         unsafe { asm!(
+//             "mov esp, {ptr}",
+//             "call {_start}",
+//             ptr = in(reg) ptr,
+//             _start = in(reg) _start,
+//             options(noreturn)
+//         )}
+//     }
 
-}
+// }

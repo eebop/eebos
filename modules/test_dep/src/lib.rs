@@ -1,6 +1,13 @@
 #![no_std]
 #![no_main]
 
+// writeln! generates these which is very annoying
+#![allow(unused_must_use)]
+
+// TODO: clean these up
+#![allow(unused_imports)]
+
+
 extern crate dyshared;
 
 use dyshared::screen::Screen;

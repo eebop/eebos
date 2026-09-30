@@ -30,7 +30,7 @@ fn __rust_alloc_error_handler(_: core::alloc::Layout) -> ! {
 #[macro_use]
 extern crate alloc;
 
-use core::{alloc::{GlobalAlloc, Layout}, arch::asm, fmt::Write, panic::PanicInfo, mem::transmute};
+use core::{alloc::{GlobalAlloc, Layout}, arch::asm, fmt::Write, mem::transmute, panic::PanicInfo, ptr::NonNull};
 use alloc::{alloc::{Global, alloc}, collections::btree_map::BTreeMap};
 use alloc::vec::Vec;
 
@@ -74,8 +74,9 @@ unsafe impl GlobalAlloc for SimpleAllocator {
 #[global_allocator]
 static ALLOCATOR: SimpleAllocator = SimpleAllocator;
 
-fn make_fncall(ptr: extern "C" fn(*mut u8, *const BTreeMap<&str, &[u8]>) -> !, memptr: *mut u8, elfdata: *const BTreeMap<&str, &[u8]>) -> ! {
-    ptr(memptr, elfdata)
+fn make_fncall(ptr: extern "C" fn(NonNull<u8>) -> !, mem: NonNull<u8>) -> ! {
+    bochsdbg();
+    ptr(mem)
 }
 
 #[unsafe(no_mangle)]
@@ -87,15 +88,15 @@ pub extern "C" fn rustmain(mem: *mut u8) {
         elf::init_elf_data();
     }
 
-    let proc = elf::load_mod("libtest_mod.so");
-    writeln!(Screen::new(), "now here in rustmain");
-    let ptr = &proc.symbols["start"];
-    let ptr = ptr.1.relocate_ptr(ptr.0.st_value as u32);
+    let proc = elf::load_mod("test_mod");
+    
+    let ptr = proc.entry;
 
     // writeln!(Screen::new(), "args are: {:?}, {:?}", unsafe { DATAPTR } as usize, &raw const *elf::ELF_DATA.get() as usize);
     // make_fncall(ptr as usize, unsafe { DATAPTR } as usize, &raw const *elf::ELF_DATA.get() as usize);
     // unsafe { core::mem::transmute::<_, extern "C" fn(usize, usize) -> !>(ptr)(unsafe { DATAPTR } as usize, &raw const *elf::ELF_DATA.get() as usize) };
-    make_fncall(unsafe { core::mem::transmute(ptr) }, unsafe { DATAPTR }, &raw const *elf::ELF_DATA.get())
+    // writeln!(Screen::new(), "heap ptr is: {:?}", unsafe {DATAPTR});
+    make_fncall(unsafe { core::mem::transmute(ptr) }, NonNull::new(unsafe {DATAPTR}).unwrap())
 }
 
 

@@ -1,18 +1,14 @@
 #![no_std]
 #![no_main]
 
-#![feature(never_type)]
+// writeln! generates these which is very annoying
+#![allow(unused_must_use)]
 
-use core::panic::PanicInfo;
+// TODO: clean these up
+#![allow(unused_imports)]
 
-use core::*;
-
-use core::fmt::Write;
-
-use core::alloc::GlobalAlloc;
-
-use dyshared::ports::{io_wait, in8, out8};
-use dyshared::screen::Screen;
+use core::{arch::asm, fmt::Write};
+use dyshared::{bochsdbg, ports::{in8, io_wait, out8}, screen::Screen};
 
 
 #[derive(Clone, Copy)]
@@ -31,6 +27,18 @@ fn get_state() -> u16 {
     return (pic2 << 8) + pic1;
 }
 
+pub extern "C" fn test_clock() -> ! {
+    // for i in 0..16 { 
+    bochsdbg();
+    enable(1);
+    // }
+    loop {
+        // writeln!(Screen, "here");
+        // send_EOI(1);
+        // send_EOI(0);
+    }
+}
+
 pub fn enable(line: u8) {
     assert!(line < 16);
 
@@ -47,7 +55,7 @@ pub fn enable(line: u8) {
     out8(port as u16, curr);
 }
 
-fn sendEOI(line: u8) {
+pub fn send_eoi(line: u8) {
     assert!(line < 16);
     if line >= 8 {
         out8(PicPort::Pic2Cmd as u16, PICEOI);

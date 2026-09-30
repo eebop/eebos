@@ -27,8 +27,6 @@ use alloc::collections::BTreeMap;
 use core::ops::{Deref, DerefMut};
 use core::fmt::Write;
 
-use crate::process::Process;
-
 // Makes a syscall and then interprets the return value
 // User side api
 pub fn make_syscall<T, U, const CHANNEL: u8>(mut data: T) -> U {
@@ -132,6 +130,7 @@ pub enum Syscall {
 }
 
 // Breakpoint using bochs
+#[inline(always)]
 pub fn bochsdbg() {
 	unsafe { core::arch::asm!("xchg bx, bx") };
 }

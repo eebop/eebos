@@ -13,9 +13,9 @@ extern crate alloc;
 pub mod ports;
 pub mod screen;
 
-use core::{alloc::{Allocator, GlobalAlloc, Layout}, fmt::Debug, ops::{Deref, DerefMut}, panic::PanicInfo};
+use core::{alloc::{Allocator, GlobalAlloc, Layout}, fmt::Debug, num::NonZero, ops::{Deref, DerefMut}, panic::PanicInfo, ptr::{self, NonNull}};
 
-use alloc::{alloc::AllocError, boxed::Box};
+use alloc::{alloc::{AllocError, AllocatorClone, Global}, boxed::Box};
 
 use crate::screen::Screen;
 
@@ -34,22 +34,46 @@ fn panic<'a, 'b>(pi: &'a PanicInfo<'b>) -> ! {
     loop {}
 }
 
-pub trait CAllocator = Allocator + Clone + Debug;
+pub static mut HEAP_PTR: NonNull<u8> = NonNull::dangling();
 
-struct EmptyAllocator;
+#[derive(Clone, Copy, Debug)]
+pub struct SimpleAllocator;
 
-unsafe impl GlobalAlloc for EmptyAllocator {
-    unsafe fn alloc(&self, _: Layout) -> *mut u8 {
-        panic!("Alloc not supported here!");
+unsafe impl Allocator for SimpleAllocator {
+        
+    fn allocate(&self, layout: Layout) -> Result<ptr::NonNull<[u8]>, AllocError> {
+        let mask = layout.align() - 1;
+        let out = unsafe {
+            HEAP_PTR = HEAP_PTR.add(mask).map_addr(|addr| NonZero::new(addr.get() & !(mask)).unwrap());
+            let out = HEAP_PTR;
+
+            HEAP_PTR = HEAP_PTR.add(layout.size());
+            out
+        };
+        Ok(NonNull::slice_from_raw_parts(out, layout.size()))
     }
-
-    unsafe fn dealloc(&self, _: *mut u8, _: Layout) {
-        panic!("Alloc not supported here!");
+    
+    unsafe fn deallocate(&self, _ptr: ptr::NonNull<u8>, _layout: Layout) {
     }
 }
 
+unsafe impl AllocatorClone for SimpleAllocator {}
+
+
+unsafe impl GlobalAlloc for SimpleAllocator {
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        self.allocate(layout).unwrap().as_ptr() as *mut u8
+    }
+    
+    unsafe fn dealloc(&self, _ptr: *mut u8, _layout: Layout) {
+    }
+}
+
+
+pub trait CAllocator = AllocatorClone + Debug;
+
 #[global_allocator]
-static EMPTY_ALLOCATOR: EmptyAllocator = EmptyAllocator;
+static EMPTY_ALLOCATOR: SimpleAllocator = SimpleAllocator;
 
 #[derive(Clone, Copy)]
 #[repr(C, align(0x1000))]

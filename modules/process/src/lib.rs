@@ -2,10 +2,7 @@
 #![feature(allocator_api)]
 #![feature(btreemap_alloc)]
 #![feature(iter_collect_into)]
-#![feature(option_into_flat_iter)]
 #![feature(exact_div)]
-#![feature(slice_ptr_get)]
-#![feature(super_let)]
 
 // writeln! generates these which is very annoying
 #![allow(unused_must_use)]
@@ -35,6 +32,15 @@ pub fn test_load_a<LA: CAllocator, PM: MappedPageAllocator>(la: LA, da: &mut PM)
 
     return x.fhdr.e_entry as *mut u8
 }
+
+pub fn test_load_b<LA: CAllocator, PM: MappedPageAllocator>(la: LA, da: &mut PM) -> *mut u8 {
+    let mut x: BTreeMap<&str, &[u8], _> = BTreeMap::new_in(la.clone());
+    x.insert("b", FILE_B);
+    let x = load_mod("b", &x, elf::AllocationStrategy::Exact, la, da);
+
+    return x.fhdr.e_entry as *mut u8
+}
+
 
 pub fn load_higher_half<LA: CAllocator, PM: MappedPageAllocator + Debug>(data: &BTreeMap<&str, &[u8]>, la: LA, da: &mut PM) -> (*mut u8, Box::<[Page], PM::A>) {
     writeln!(Screen, "data is: {:?}", data.keys());

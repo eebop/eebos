@@ -57,10 +57,6 @@ void PIC_remap(int offset1, int offset2) {
 	outb(PIC2_DATA, ICW4_8086);
 	io_wait();
 
-	// Unmask both PICs.
-	outb(PIC1_DATA, 0);
-    io_wait();
-	outb(PIC2_DATA, 0);
 }
 
 void IRQ_set_mask(uint8_t IRQline) {
